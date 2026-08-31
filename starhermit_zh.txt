@@ -1,0 +1,133 @@
+
+
+## 第 8 章 服务器与网络架构
+
+### 8.1 服务端运行时
+
+服务器使用 Node.js 20+，通过 `npm install`（或 npm ci）安装依赖。启动命令：
+
+    node server.js
+
+默认监听 3000 端口；可通过环境变量 PORT 覆盖。生产环境应使用进程管理器（pm2、systemd 等）。
+
+### 8.2 静态文件服务
+
+服务器提供以下文件的 HTTP GET 请求：
+- `index.html` —— 游戏页面
+- `js/platform.js`、`js/session.js`、`js/content.js`、`js/rules.js` —— 模块脚本（按 index.html 中的顺序加载）
+- 音频资源文件（见第 10.4 节）
+
+### 8.3 实时 API
+
+所有端点均为 `POST /api/...`，请求体为 JSON。响应格式：成功时 `{ "ok": true, ... }`；失败时 `{ "ok": false, "error_code", "message" }`（HTTP 400）。
+
+#### 8.3.1 POST /api/session —— 创建会话
+- 请求体：无字段。
+- 响应：`session_id`、`created_at_ms`，以及 `settings: { sound_enabled, music_enabled, haptics_enabled }`（均为布尔值；新用户默认 true）。
+
+#### 8.3.2 POST /api/settings —— 更新设置
+- 请求体：`sound_enabled?`、`music_enabled?`、`haptics_enabled?`（可选，布尔值），至少一个。
+- 响应：完整的 `settings: { sound_enabled, music_enabled, haptics_enabled }`。
+
+#### 8.3.3 POST /api/game/start —— 开始游戏
+- 请求体：无字段。
+- 响应：`game_id`、`started_at_ms`，以及 `initial_state: { phase, level_index, lives_remaining, score, combo_count, web_progress }`（web_progress 为长度 8 的整数数组）。
+
+#### 8.3.4 POST /api/game/state —— 获取状态
+- 请求体：无字段。
+- 响应：完整的 `state: { phase, level_index, lives_remaining, score, combo_count, web_progress }`（web_progress 为长度 8 的整数数组）。
+
+#### 8.3.5 POST /api/game/action —— 提交动作
+- 请求体：`action_type`，取值 `"tap"` | `"pause"` | `"resume"`。
+- 响应：完整的 `state: { phase, level_index, lives_remaining, score, combo_count, web_progress }`（web_progress 为长度 8 的整数数组）。
+
+#### 8.3.6 POST /api/game/stop —— 结束游戏
+- 请求体：无字段。
+- 响应：完整的 `state: { phase, level_index, lives_remaining, score, combo_count, web_progress }`（web_progress 为长度 8 的整数数组）。
+
+### 8.4 服务端会话与状态管理
+
+每个 session_id 对应一个服务器端会话，保存设置和当前游戏。开始新游戏时若已有进行中的游戏则被替换。每次动作提交后更新并持久化该游戏的权威状态；获取状态返回最新值。停止操作将游戏标记为已结束（终局）。客户端断线重连后可通过 session_id 恢复完整状态与设置。
+
+### 8.5 服务端数据保留策略
+
+服务器会话数据至少在当前进程生命周期内可用，并在重启后持久化。具体存储后端由部署决定；本规格不规定实现细节。
+
+## 第 9 章 存档、统计与成就
+
+### 9.1 本地存档（localStorage）
+
+键名 `eight_webs_save_v1`：
+- `best_score: number | null` —— 历史最高分
+- `total_taps: number` —— 累计点击次数
+- `games_played: number` —— 累计游戏局数
+- `achievements: { [id: string]: boolean }` —— 已解锁成就
+
+### 9.2 统计与成就更新时机
+
+每次动作提交后：若该次点击命中了网，则 total_taps +1；若本次操作导致游戏结束（生命耗尽或全部通关），则 games_played +1。best_score 仅在终局时更新为最终得分（若更高）。成就按第 9.3 节的条件检查并解锁。
+
+### 9.3 成就列表
+- `tap_50`：累计点击达到 50 次
+- `tap_200`：累计点击达到 200 次
+- `score_1k`：单局得分达到 1000
+- `score_5k`：单局得分达到 5000
+- `clear_all`：在一局中通关全部八张网
+
+## 第 10 章 资源与文件清单
+
+### 10.1 源代码文件（本仓库）
+- `index.html` —— 页面入口，按顺序加载四个模块脚本并挂载 #app
+- `js/platform.js` —— 平台检测、音频/震动控制、本地存储封装
+- `js/session.js` —— 会话与设置管理、网络 API 客户端
+- `js/content.js` —— 关卡数据（名称、颜色）
+- `js/rules.js` —— 游戏规则引擎与游戏状态机
+- `server.js` —— Node HTTP 服务器：静态文件 + /api 端点
+
+### 10.2 构建产物
+无。纯 JavaScript，无需编译步骤；Node 运行时直接执行 server.js。
+
+### 10.3 第三方依赖（npm）
+- `express@^4.18` —— HTTP 服务器框架
+- `three@^0.160` —— 3D 渲染引擎
+
+### 10.4 音频资源文件
+以下 MP3 文件必须与代码一同分发，并由平台层加载：
+- `assets/audio/sound_tap.mp3` —— 点击音效（命中时播放）
+- `assets/audio/sound_miss.mp3` —— 落空音效
+- `assets/audio/music_gameplay.mp3` —— 游戏背景音乐
+
+### 10.5 资源完整性要求
+所有代码文件、音频文件和 index.html 必须完整存在且可访问。缺失任何一项即视为构建/部署错误，应导致加载失败并显示相应错误信息（见第 6.2 节）。
+
+## 第 11 章 已知问题与未来工作
+
+### 11.1 当前已知问题
+- 移动端首次点击可能因音频上下文延迟而听不到音效（后续版本将预加载）
+- 高分辨率屏幕下部分设备的渲染性能有待优化
+- 尚无任何自动化测试覆盖；发布前需补充单元测试与集成测试
+
+### 11.2 未来工作方向
+- 增加更多关卡与更丰富的视觉效果
+- 支持多人在线对战模式（后续版本）
+- 接入全球排行榜系统
+- 本地化：中文、日文等语言界面（后续版本）
+
+
+
+## 附录 A 术语表
+
+| 英文 | 中文 | 说明 |
+|------|------|------|
+| web | 网 | 游戏的核心对象，共八张 |
+| level | 关卡 | 每张网对应一个关卡 |
+| tap | 点击/触摸 | 玩家的操作输入 |
+| combo | 连击 | 连续命中累计计数 |
+| life | 生命 | 初始三条，落空扣一 |
+| score | 得分 | 按规则累计的分数 |
+| session | 会话 | 服务器端的一次游戏会话 |
+
+## 附录 B 参考与致谢
+
+本规格文档基于项目团队的集体工作编写。感谢所有参与者的贡献。相关技术参考资料见第 10.3 节所列依赖项的官方文档。
+

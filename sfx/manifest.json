@@ -1,0 +1,74 @@
+[
+  {
+    "name": "card-select",
+    "seconds": 1,
+    "prompt": "A single playing card tapped softly against a felt-covered card table, short crisp papery snap.",
+    "event": "select"
+  },
+  {
+    "name": "card-deselect",
+    "seconds": 1,
+    "prompt": "A playing card gently laid back down onto a small stack of cards, quiet soft paper slide.",
+    "event": "deselect"
+  },
+  {
+    "name": "card-move",
+    "seconds": 1,
+    "prompt": "A playing card sliding across a wooden card table with a light papery swish and a soft landing.",
+    "event": "move"
+  },
+  {
+    "name": "invalid-move",
+    "seconds": 1,
+    "prompt": "A dull wooden knock on a card table followed by a short muted card slap, negative feedback thud.",
+    "event": "invalid"
+  },
+  {
+    "name": "card-flip",
+    "seconds": 1,
+    "prompt": "A playing card flipped over with a quick snappy paper flick, crisp and light.",
+    "event": "flip"
+  },
+  {
+    "name": "deal-row",
+    "seconds": 2,
+    "prompt": "A row of playing cards dealt rapidly across a felt table, a quick sequence of overlapping papery swishes.",
+    "event": "deal"
+  },
+  {
+    "name": "web-complete",
+    "seconds": 2,
+    "prompt": "A triumphant ascending three-note chime like small brass bells with a shimmering tail, celebratory.",
+    "event": "run-complete"
+  },
+  {
+    "name": "hint-chime",
+    "seconds": 1,
+    "prompt": "A soft high glass-bell chime with a gentle sparkle, brief and helpful.",
+    "event": "hint"
+  },
+  {
+    "name": "undo-whoosh",
+    "seconds": 1,
+    "prompt": "A quick reversed airy whoosh, like a card being pulled backward through the air.",
+    "event": "undo"
+  },
+  {
+    "name": "round-win",
+    "seconds": 3,
+    "prompt": "A joyful short victory fanfare of bright bells and a rising harp glissando, celebratory finish.",
+    "event": "win"
+  },
+  {
+    "name": "round-lose",
+    "seconds": 2,
+    "prompt": "A soft descending muted marimba phrase, a gentle disappointed fall, not harsh.",
+    "event": "lose"
+  },
+  {
+    "name": "clock-tick",
+    "seconds": 1,
+    "prompt": "A single dry mechanical clock tick, a very short quiet wooden click.",
+    "event": "tick"
+  }
+]

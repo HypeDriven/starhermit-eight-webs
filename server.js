@@ -1,12 +1,13 @@
 // Eight Webs — authoritative server.
-// Node 20+, express. Serves the static distribution plus:
+// Node 20+, dependency-free (node:http only, so a clean checkout runs it
+// without npm install). Serves the static distribution plus:
 //   - StarHermit host API: GET /api/v1/time, score submission with
 //     deterministic replay validation, leaderboards, achievement delivery.
 //   - Session/state API (see docs chapter 8): /api/session, /api/settings,
 //     /api/game/start|state|action|stop with restart-persistent storage.
 // Start: node server.js   (PORT env overrides the default 3000)
 
-import express from 'express';
+import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -58,23 +59,112 @@ function rateLimit(key, max, windowMs) {
 }
 
 // ---------------------------------------------------------------------------
-// App
+// Minimal HTTP plumbing (replaces express)
 // ---------------------------------------------------------------------------
 
-const app = express();
-app.use(express.json({ limit: '64kb' })); // payload size bound
+function sendJson(res, status, body) {
+  const payload = JSON.stringify(body);
+  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': Buffer.byteLength(payload) });
+  res.end(payload);
+}
 
-const ok = (res, extra = {}) => res.json({ ok: true, ...extra });
+const ok = (res, extra = {}) => sendJson(res, 200, { ok: true, ...extra });
 const fail = (res, code, message, status = 400) =>
-  res.status(status).json({ ok: false, error: message, error_code: code, message });
+  sendJson(res, status, { ok: false, error: message, error_code: code, message });
+
+function readBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let size = 0;
+    req.on('data', (c) => {
+      size += c.length;
+      if (size > 64 * 1024) { reject(new Error('Payload too large')); req.destroy(); return; } // payload size bound
+      chunks.push(c);
+    });
+    req.on('end', () => {
+      if (!chunks.length) return resolve({});
+      try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8'))); }
+      catch { reject(new Error('Malformed JSON body')); }
+    });
+    req.on('error', reject);
+  });
+}
+
+const MIME = {
+  '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml',
+  '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp', '.ico': 'image/x-icon', '.opus': 'audio/ogg',
+  '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.ogg': 'audio/ogg',
+  '.txt': 'text/plain; charset=utf-8', '.md': 'text/markdown; charset=utf-8',
+  '.woff': 'font/woff', '.woff2': 'font/woff2', '.wasm': 'application/wasm',
+};
+
+function serveStatic(req, res, pathname) {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return false;
+  let rel = decodeURIComponent(pathname);
+  if (rel.endsWith('/')) rel += 'index.html';
+  const filePath = path.normalize(path.join(__dirname, rel));
+  if (!filePath.startsWith(__dirname + path.sep) && filePath !== __dirname) return false;
+  let stat;
+  try {
+    stat = fs.statSync(filePath);
+    if (stat.isDirectory()) {
+      const idx = path.join(filePath, 'index.html');
+      stat = fs.statSync(idx);
+      if (!stat.isFile()) return false;
+      return streamFile(req, res, idx, stat);
+    }
+  } catch { return false; }
+  return streamFile(req, res, filePath, stat);
+}
+
+function streamFile(req, res, filePath, stat) {
+  // Immutable hashed assets cache long; everything else revalidates.
+  const cache = /node_modules|assets/.test(filePath) ? 'public, max-age=86400' : 'no-cache';
+  res.writeHead(200, {
+    'Content-Type': MIME[path.extname(filePath).toLowerCase()] || 'application/octet-stream',
+    'Content-Length': stat.size,
+    'Cache-Control': cache,
+  });
+  if (req.method === 'HEAD') { res.end(); return true; }
+  fs.createReadStream(filePath).pipe(res);
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// Routes
+// ---------------------------------------------------------------------------
+
+// Each handler receives (req, res, params, body). `params` holds the named
+// segments from patterns like '/api/v1/daily/session/:id'.
+const routes = [];
+function route(method, pattern, handler) {
+  const keys = [];
+  const rx = new RegExp('^' + pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/:([A-Za-z_]+)/g, (_, k) => { keys.push(k); return '([^/]+)'; }) + '$');
+  routes.push({ method, rx, keys, handler });
+}
+
+function getSession(id) {
+  const s = store.sessions[id];
+  return s || null;
+}
+function gameView(g) {
+  if (!g) return null;
+  return {
+    phase: g.phase, level_index: g.level_index, lives_remaining: g.lives_remaining,
+    score: g.score, combo_count: g.combo_count, web_progress: g.web_progress,
+  };
+}
 
 // --- StarHermit platform time (round-trip-adjusted by the client) -----------
-app.get('/api/v1/time', (req, res) => {
-  res.json({ ok: true, now: Date.now(), utcDay: new Date().toISOString().slice(0, 10), build: BUILD });
+route('GET', '/api/v1/time', (req, res) => {
+  ok(res, { now: Date.now(), utcDay: new Date().toISOString().slice(0, 10), build: BUILD });
 });
 
 // Daily content descriptor for the current UTC day (immutable seed).
-app.get('/api/v1/daily', (req, res) => {
+route('GET', '/api/v1/daily', (req, res) => {
   const day = new Date().toISOString().slice(0, 10);
   if (store.exclusions[day]) return fail(res, 'day-excluded', 'This daily is excluded from ranking', 409);
   const def = dailyForDate(new Date());
@@ -83,8 +173,8 @@ app.get('/api/v1/daily', (req, res) => {
 
 // --- Daily session: authoritative script for seeded daily rounds ------------
 // POST /api/v1/daily/start  { } -> { sessionId, content, state }
-app.post('/api/v1/daily/start', (req, res) => {
-  const key = req.ip || 'anon';
+route('POST', '/api/v1/daily/start', (req, res) => {
+  const key = req.socket.remoteAddress || 'anon';
   if (!rateLimit(`start:${key}`, 30, 60000)) return fail(res, 'rate-limited', 'Too many requests; retry shortly', 429);
   const day = new Date().toISOString().slice(0, 10);
   if (store.exclusions[day]) return fail(res, 'day-excluded', 'This daily is excluded from ranking', 409);
@@ -103,8 +193,8 @@ app.post('/api/v1/daily/start', (req, res) => {
 });
 
 // POST /api/v1/daily/command { sessionId, command } — validated, idempotent.
-app.post('/api/v1/daily/command', (req, res) => {
-  const { sessionId, command } = req.body || {};
+route('POST', '/api/v1/daily/command', (req, res, params, body) => {
+  const { sessionId, command } = body || {};
   const g = store.games[sessionId];
   if (!g || g.kind !== 'daily') return fail(res, 'unknown-session', 'No such daily session', 404);
   if (g.done) return fail(res, 'round-over', 'Session already finished');
@@ -125,8 +215,8 @@ app.post('/api/v1/daily/command', (req, res) => {
 });
 
 // GET /api/v1/daily/session/:id — fresh snapshot for reconnecting clients.
-app.get('/api/v1/daily/session/:id', (req, res) => {
-  const g = store.games[req.params.id];
+route('GET', '/api/v1/daily/session/:id', (req, res, params) => {
+  const g = store.games[params.id];
   if (!g) return fail(res, 'unknown-session', 'No such session', 404);
   ok(res, {
     snapshot: g.state, done: g.done, day: g.day,
@@ -136,10 +226,10 @@ app.get('/api/v1/daily/session/:id', (req, res) => {
 
 // --- Score submission with replay validation --------------------------------
 // POST /api/v1/score { board, envelope } — envelope replayed server-side.
-app.post('/api/v1/score', (req, res) => {
-  const { board, envelope } = req.body || {};
+route('POST', '/api/v1/score', (req, res, params, body) => {
+  const { board, envelope } = body || {};
   if (!board || !envelope) return fail(res, 'bad-request', 'board and envelope required');
-  if (!rateLimit(`score:${req.ip}`, 20, 60000)) return fail(res, 'rate-limited', 'Too many submissions', 429);
+  if (!rateLimit(`score:${req.socket.remoteAddress}`, 20, 60000)) return fail(res, 'rate-limited', 'Too many submissions', 429);
   if (envelope.build > CONTENT_VERSION + 1) return fail(res, 'stale-version', 'Unknown content version');
   const r = replay(envelope);
   if (!r.ok) return fail(res, 'replay-invalid', `Replay rejected: ${r.error} at command ${r.atCommand}`);
@@ -174,18 +264,18 @@ app.post('/api/v1/score', (req, res) => {
 });
 
 // GET /api/v1/leaderboard/:board?scope=global|friends
-app.get('/api/v1/leaderboard/:board', (req, res) => {
-  const list = (store.boards[req.params.board] || []).slice(0, 20).map((e, i) => ({
+route('GET', '/api/v1/leaderboard/:board', (req, res, params) => {
+  const list = (store.boards[params.board] || []).slice(0, 20).map((e, i) => ({
     rank: i + 1, score: e.score, status: e.status, foundations: e.foundations,
     moves: e.moves, invalid: e.invalid, elapsedMs: e.elapsedMs,
     seed: e.seed, contentId: e.contentId, assists: e.assists, validated: e.validated,
   }));
-  ok(res, { board: req.params.board, entries: list, label: 'validated' });
+  ok(res, { board: params.board, entries: list, label: 'validated' });
 });
 
 // --- Achievements: durable, idempotent delivery -----------------------------
-app.post('/api/v1/achievements', (req, res) => {
-  const { playerId, keys } = req.body || {};
+route('POST', '/api/v1/achievements', (req, res, params, body) => {
+  const { playerId, keys } = body || {};
   if (!playerId || !Array.isArray(keys)) return fail(res, 'bad-request', 'playerId and keys[] required');
   const known = new Set(ACHIEVEMENTS.map((a) => a.key));
   const owned = (store.achievements[playerId] ||= {});
@@ -198,27 +288,15 @@ app.post('/api/v1/achievements', (req, res) => {
   ok(res, { unlocked, owned: Object.keys(owned) });
 });
 
-app.get('/api/v1/achievements/:playerId', (req, res) => {
-  ok(res, { owned: Object.keys(store.achievements[req.params.playerId] || {}) });
+route('GET', '/api/v1/achievements/:playerId', (req, res, params) => {
+  ok(res, { owned: Object.keys(store.achievements[params.playerId] || {}) });
 });
 
 // ---------------------------------------------------------------------------
 // Session/state API (docs chapter 8) — POST /api/... JSON, {ok:true|false,...}
 // ---------------------------------------------------------------------------
 
-function getSession(id) {
-  const s = store.sessions[id];
-  return s || null;
-}
-function gameView(g) {
-  if (!g) return null;
-  return {
-    phase: g.phase, level_index: g.level_index, lives_remaining: g.lives_remaining,
-    score: g.score, combo_count: g.combo_count, web_progress: g.web_progress,
-  };
-}
-
-app.post('/api/session', (req, res) => {
+route('POST', '/api/session', (req, res) => {
   const id = crypto.randomUUID();
   store.sessions[id] = {
     created_at_ms: Date.now(),
@@ -229,10 +307,10 @@ app.post('/api/session', (req, res) => {
   ok(res, { session_id: id, created_at_ms: store.sessions[id].created_at_ms, settings: store.sessions[id].settings });
 });
 
-app.post('/api/settings', (req, res) => {
-  const s = getSession(req.body?.session_id) || Object.values(store.sessions).at(-1);
+route('POST', '/api/settings', (req, res, params, body) => {
+  const s = getSession(body?.session_id) || Object.values(store.sessions).at(-1);
   if (!s) return fail(res, 'no-session', 'Create a session first');
-  const b = req.body || {};
+  const b = body || {};
   const keys = ['sound_enabled', 'music_enabled', 'haptics_enabled'];
   const given = keys.filter((k) => typeof b[k] === 'boolean');
   if (!given.length) return fail(res, 'bad-request', 'At least one boolean setting is required');
@@ -241,8 +319,8 @@ app.post('/api/settings', (req, res) => {
   ok(res, { settings: s.settings });
 });
 
-app.post('/api/game/start', (req, res) => {
-  const s = getSession(req.body?.session_id) || Object.values(store.sessions).at(-1);
+route('POST', '/api/game/start', (req, res, params, body) => {
+  const s = getSession(body?.session_id) || Object.values(store.sessions).at(-1);
   if (!s) return fail(res, 'no-session', 'Create a session first');
   const id = crypto.randomUUID();
   // A new game replaces any in-progress one (docs 8.4).
@@ -256,8 +334,8 @@ app.post('/api/game/start', (req, res) => {
   ok(res, { game_id: id, started_at_ms: store.games[id].started_at_ms, initial_state: gameView(store.games[id]) });
 });
 
-function withGame(req, res, fn) {
-  const s = getSession(req.body?.session_id) || Object.values(store.sessions).at(-1);
+function withGame(req, res, body, fn) {
+  const s = getSession(body?.session_id) || Object.values(store.sessions).at(-1);
   if (!s || !s.game_id || !store.games[s.game_id]) return fail(res, 'no-game', 'No game in progress', 404);
   const g = store.games[s.game_id];
   fn(g);
@@ -265,12 +343,12 @@ function withGame(req, res, fn) {
   ok(res, { state: gameView(g) });
 }
 
-app.post('/api/game/state', (req, res) => withGame(req, res, () => {}));
+route('POST', '/api/game/state', (req, res, params, body) => withGame(req, res, body, () => {}));
 
-app.post('/api/game/action', (req, res) => {
-  const t = req.body?.action_type;
+route('POST', '/api/game/action', (req, res, params, body) => {
+  const t = body?.action_type;
   if (!['tap', 'pause', 'resume'].includes(t)) return fail(res, 'bad-request', 'action_type must be tap|pause|resume');
-  withGame(req, res, (g) => {
+  withGame(req, res, body, (g) => {
     if (t === 'pause' && g.phase === 'playing') g.phase = 'paused';
     else if (t === 'resume' && g.phase === 'paused') g.phase = 'playing';
     else if (t === 'tap' && g.phase === 'playing') {
@@ -291,13 +369,13 @@ app.post('/api/game/action', (req, res) => {
   });
 });
 
-app.post('/api/game/stop', (req, res) => withGame(req, res, (g) => {
+route('POST', '/api/game/stop', (req, res, params, body) => withGame(req, res, body, (g) => {
   if (g.phase === 'playing' || g.phase === 'paused') g.phase = 'ended';
 }));
 
 // --- Content validation endpoint (offline validators, on demand) ------------
-app.get('/api/v1/validate/:contentId', (req, res) => {
-  const id = req.params.contentId;
+route('GET', '/api/v1/validate/:contentId', (req, res, params) => {
+  const id = params.contentId;
   let def = null;
   if (id.startsWith('daily-')) def = dailyForDate(new Date(`${id.slice(6)}T00:00:00Z`));
   if (!def) return fail(res, 'unknown-content', 'No such content id', 404);
@@ -305,20 +383,31 @@ app.get('/api/v1/validate/:contentId', (req, res) => {
   ok(res, { report });
 });
 
-// --- Static distribution ------------------------------------------------------
-app.use(express.static(__dirname, {
-  index: 'index.html',
-  setHeaders(res, filePath) {
-    // Immutable hashed assets cache long; everything else revalidates.
-    if (/node_modules|assets/.test(filePath)) res.setHeader('Cache-Control', 'public, max-age=86400');
-    else res.setHeader('Cache-Control', 'no-cache');
-  },
-}));
+// ---------------------------------------------------------------------------
+// Server
+// ---------------------------------------------------------------------------
 
-app.use((req, res) => fail(res, 'not-found', 'Not found', 404));
-// Structured error responses for malformed JSON etc.
-app.use((err, req, res, next) => fail(res, 'bad-request', err.message || 'Bad request'));
+const server = http.createServer(async (req, res) => {
+  let pathname;
+  try { pathname = new URL(req.url, 'http://localhost').pathname; }
+  catch { return fail(res, 'bad-request', 'Bad request'); }
+  for (const r of routes) {
+    if (r.method !== req.method) continue;
+    const m = r.rx.exec(pathname);
+    if (!m) continue;
+    const params = Object.fromEntries(r.keys.map((k, i) => [k, decodeURIComponent(m[i + 1])]));
+    let body = {};
+    if (req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH') {
+      try { body = await readBody(req); }
+      catch (e) { return fail(res, 'bad-request', e.message || 'Bad request'); } // structured errors for malformed JSON
+    }
+    try { return r.handler(req, res, params, body); }
+    catch (e) { return fail(res, 'internal', e.message || 'Internal error', 500); }
+  }
+  if (serveStatic(req, res, pathname)) return;
+  fail(res, 'not-found', 'Not found', 404);
+});
 
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`Eight Webs server listening on http://localhost:${PORT}`);
 });

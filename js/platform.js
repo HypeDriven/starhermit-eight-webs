@@ -7,6 +7,7 @@ export const PLATFORM_VERSION = 1;
 export class Platform {
   constructor() {
     this.token = null;              // launch/account token from the host shell
+    this.hosted = false;            // set by the /api/v1/time probe; gates every other route
     this.playerId = this.ensurePlayerId();
     this.offsetMs = 0;              // server-minus-client clock offset
     this.consent = false;           // telemetry consent flag
@@ -73,14 +74,25 @@ export class Platform {
     throw lastErr;
   }
 
-  // Round-trip-adjusted offset against GET /api/v1/time.
+  // Probe the one route every host guarantees: GET /api/v1/time. Its result
+  // sets the hosted flag; when it fails, every other hosted feature below is
+  // a local no-op and never issues a request.
   async syncServerTime() {
     try {
       const t0 = Date.now();
-      const r = await this.api('/time');
+      const res = await fetch('/api/v1/time', { cache: 'no-store' });
+      if (!res.ok) throw new Error('no-time');
+      const r = await res.json();
       const t1 = Date.now();
-      this.offsetMs = r.now - Math.round((t0 + t1) / 2);
-    } catch { /* offline: countdowns fall back to local clock */ }
+      const serverMs = Number(r.now ?? r.serverTime ?? r.epochMs);
+      if (!Number.isFinite(serverMs)) throw new Error('no-time');
+      this.offsetMs = serverMs - Math.round((t0 + t1) / 2);
+      this.hosted = true;
+    } catch {
+      // Offline or unhosted: countdowns fall back to the local clock.
+      this.hosted = false;
+      this.offsetMs = 0;
+    }
     return this.offsetMs;
   }
 
@@ -89,6 +101,7 @@ export class Platform {
 
   // --- score + achievement submission ------------------------------------------
   async submitScore(def, envelope) {
+    if (!this.hosted) return { error: 'offline', casual: true };
     const board = def.mode === 'daily' ? `daily:${def.goals?.daily}` : `global:${def.suits}suit`;
     try {
       const r = await this.api('/score', { board, envelope });
@@ -100,7 +113,13 @@ export class Platform {
   }
 
   async reportAchievements(keys) {
+    if (!this.hosted) return;
     try { await this.api('/achievements', { playerId: this.playerId, keys }); } catch { /* durable locally */ }
+  }
+
+  async fetchLeaderboard(board = 'global') {
+    if (!this.hosted) return { entries: [] };
+    try { return await this.api(`/leaderboard/${board}`); } catch { return { entries: [] }; }
   }
 
   recordResult() { /* results are persisted locally by the session; hosted
@@ -108,7 +127,7 @@ export class Platform {
 
   // --- telemetry: anonymous funnel only, explicit consent ----------------------
   telemetry(event, props = {}) {
-    if (!this.consent) return;
+    if (!this.consent || !this.hosted) return;
     const allowed = ['start', 'tutorial-step', 'round-end', 'retry', 'settings-change', 'error'];
     if (!allowed.includes(event)) return;
     try { navigator.sendBeacon?.('/api/v1/telemetry', JSON.stringify({ event, props, t: Date.now() })); } catch {}

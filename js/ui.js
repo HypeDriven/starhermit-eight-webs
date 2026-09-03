@@ -354,7 +354,7 @@ export class UI {
         `${new Date(r.at).toLocaleDateString()} · ${r.contentId} — ${r.status === 'won' ? 'Won' : 'Lost'} · score ${r.score.total} (base ${r.score.base}, moves ${r.score.movePenalty}, webs +${r.score.runs}, time +${r.score.time}, no-undo +${r.score.noUndo})`));
     }
     const lb = el('div', 'menu-list');
-    this.platform.api?.('/leaderboard/global').then?.(() => {}).catch?.(() => {});
+    this.platform.fetchLeaderboard?.('global').then?.(() => {}).catch?.(() => {});
     wrap.append(list, this.button('← Back', () => this.show('modes')));
     this.overlay.append(wrap);
   }

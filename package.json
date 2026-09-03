@@ -11,6 +11,6 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "test": "node test/run-tests.mjs"
+    "test": "node tests/run-tests.mjs"
   }
 }

@@ -1,4 +1,4 @@
-// Eight Webs — offline test suite (node test/run-tests.mjs).
+// Eight Webs — offline test suite (node tests/run-tests.mjs).
 // Covers: every legal action + invalid reasons, scoring components, terminal
 // states, serialization migration, deterministic replay property tests,
 // fuzzed malformed commands, content validators, and golden sessions.

@@ -75,6 +75,7 @@ export class Session {
 
   pause(reason = 'user') {
     if (this.machine !== 'active' && this.machine !== 'tutorial') return;
+    this.pausedFrom = this.machine; // resume returns to the state we left
     this.pauseAccum = this.nowMs();
     this.pauseStart = performance.now();
     this.transition('paused', reason);
@@ -84,7 +85,9 @@ export class Session {
   resume() {
     if (this.machine !== 'paused' && this.machine !== 'reconnecting') return;
     this.startStamp = performance.now();
-    this.transition('active', `resume:${this.machineReason}`);
+    const back = this.pausedFrom === 'tutorial' ? 'tutorial' : 'active';
+    this.pausedFrom = null;
+    this.transition(back, `resume:${this.machineReason}`);
   }
 
   // Backgrounding pauses solo simulation; on return we rebuild from the last
@@ -186,7 +189,7 @@ export class Session {
       return { error: 'lesson-gated' };
     }
     const legality = checkMove(this.state, from, idx, to);
-    this.pushUndo();
+    if (legality.ok) this.pushUndo(); // only real moves are undoable
     const r = this.dispatch(action);
     this.selection = null;
     this.emit({ type: 'select', selection: null });
@@ -224,6 +227,7 @@ export class Session {
   }
 
   hint() {
+    if (!this.state) return { error: 'no-round' };
     if (!this.def?.assists?.hints) return { error: 'hints-disabled' };
     const h = getHint(this.state);
     if (h) this.emit({ type: 'hint', ...h });
@@ -263,10 +267,18 @@ export class Session {
   undo() {
     if (!this.undoAllowed()) return { error: 'undo-unavailable' };
     const undos = this.state.undos + 1;
+    const markerId = this.state.nextCmdId; // unique: beyond every prior id
     this.state = deserialize(this.undoStack.pop());
     this.state.undos = undos; // no-undo scoring survives the restore
+    // The undo is itself a replayable command (see rules.replay): the log
+    // keeps the undone commands plus a marker naming the last surviving id,
+    // so ranked envelopes still validate server-side after an undo.
+    this.commands.push({
+      id: markerId, at: Math.floor(this.nowMs()),
+      type: 'undo', toId: this.state.nextCmdId - 1,
+    });
+    this.checkpoints.push({ after: markerId, hash: hashState(this.state) });
     this.selection = null;
-    this.commands.push({ id: -1, at: Math.floor(this.nowMs()), type: 'undo-marker' });
     this.emit({ type: 'undo', state: this.state });
     return { ok: true };
   }
@@ -372,9 +384,10 @@ export class Session {
   }
 
   verifyOwnReplay() {
+    if (!this.state) return false;
     const env = this.replayEnvelope();
     const r = replay(env);
-    return r.ok && r.finalHash === this.checkpoints[this.checkpoints.length - 1]?.hash;
+    return r.ok && r.finalHash === hashState(this.state);
   }
 
   saveResult() {

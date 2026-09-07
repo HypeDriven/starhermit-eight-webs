@@ -14,6 +14,7 @@ import {
   LESSONS, JOURNEY, CHALLENGES, PRACTICE_DIFFICULTIES, practiceDef,
   dailyForDate, validateContent, validateAll, THEMES, ACHIEVEMENTS,
 } from '../js/content.js';
+import { Session } from '../js/session.js';
 
 let passed = 0;
 const tests = [];
@@ -296,6 +297,46 @@ test('fuzz: malformed commands never hang, corrupt, or produce NaN', () => {
     assert.ok(Number.isFinite(r.state.score.total));
     if (r.error) assert.equal(hashState(st), before); // rejected ⇒ untouched
   }
+});
+
+// --- session-level undo stays replay-valid -------------------------------------
+test('session undo is a replayable command; envelopes validate after undo', () => {
+  const platform = {
+    saveLocal() {}, loadLocal: () => null, serverOffsetMs: () => 0, recordResult() {},
+  };
+  const s = new Session(platform, () => {});
+  s.startRound(practiceDef('single', 'undo-test'));
+  s.beginActive();
+  const playHint = () => {
+    const h = getHint(s.state);
+    assert.ok(h, 'expected a legal move');
+    s.selection = { from: h.from, idx: h.idx };
+    const r = s.commitMove(h.to);
+    assert.ok(!r.error, `move failed: ${r.error}`);
+  };
+  playHint(); playHint(); playHint();
+  assert.equal(s.state.moves, 3);
+  assert.ok(!s.undo().error);
+  assert.equal(s.state.moves, 2);
+  assert.equal(s.state.undos, 1);
+  playHint(); playHint();
+  assert.ok(s.verifyOwnReplay(), 'own replay must validate after an undo');
+  const rep = replay(s.replayEnvelope());
+  assert.ok(rep.ok, `replay failed: ${rep.error}`);
+  assert.equal(rep.final.undos, 1); // no-undo bonus correctly withheld
+  assert.equal(rep.finalHash, hashState(s.state));
+  assert.ok(!s.undo().error);
+  assert.ok(!s.undo().error);
+  assert.equal(s.state.undos, 3);
+  assert.ok(s.verifyOwnReplay(), 'consecutive undos must retain the cumulative undo count');
+  playHint();
+  assert.ok(s.verifyOwnReplay(), 'new moves after consecutive undos must replay');
+});
+
+test('replay rejects undo markers pointing at unknown commands', () => {
+  const rep = replay({ init: { seed: 'x', suits: 1 }, commands: [{ id: 1, at: 0, type: 'undo', toId: 7 }] });
+  assert.equal(rep.ok, false);
+  assert.equal(rep.error, 'undo-target-missing');
 });
 
 // --- golden sessions -------------------------------------------------------------------

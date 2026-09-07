@@ -201,8 +201,8 @@ export class UI {
     wrap.addEventListener('pointerdown', (e) => { if (e.target === wrap) close(); });
     modal.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.stopPropagation(); close(); } });
     const first = modal.querySelector('button, [tabindex], input, select');
-    (first || modal).tabIndex = -1;
-    (first || modal).focus();
+    if (first) first.focus();
+    else { modal.tabIndex = -1; modal.focus(); } // don't knock controls out of the tab order
     return close;
   }
 
@@ -354,9 +354,24 @@ export class UI {
         `${new Date(r.at).toLocaleDateString()} · ${r.contentId} — ${r.status === 'won' ? 'Won' : 'Lost'} · score ${r.score.total} (base ${r.score.base}, moves ${r.score.movePenalty}, webs +${r.score.runs}, time +${r.score.time}, no-undo +${r.score.noUndo})`));
     }
     const lb = el('div', 'menu-list');
-    this.platform.fetchLeaderboard?.('global').then?.(() => {}).catch?.(() => {});
-    wrap.append(list, this.button('← Back', () => this.show('modes')));
+    wrap.append(list, lb, this.button('← Back', () => this.show('modes')));
     this.overlay.append(wrap);
+    // Today's daily board is the primary competitive board submissions post to.
+    const day = new Date().toISOString().slice(0, 10);
+    this.platform.fetchLeaderboard?.(`daily:${day}`).then((r) => {
+      const entries = r?.entries || [];
+      if (!this.platform.hosted) {
+        lb.append(el('p', 'dim', 'Hosted leaderboards appear here when played through StarHermit.'));
+        return;
+      }
+      lb.append(el('h2', null, `Daily board — ${day}`));
+      if (!entries.length) { lb.append(el('p', 'dim', 'No validated scores yet today.')); return; }
+      for (const e of entries) {
+        const t = `${Math.floor(e.elapsedMs / 60000)}:${String(Math.floor(e.elapsedMs / 1000) % 60).padStart(2, '0')}`;
+        lb.append(el('div', 'score-row',
+          `#${e.rank} — score ${e.score} · webs ${e.foundations} · ${e.moves} moves · ${e.invalid} invalid · ${t}${e.validated ? ' · validated' : ''}`));
+      }
+    }).catch(() => {});
   }
 
   screenHelp() {
@@ -523,6 +538,7 @@ export class UI {
       if (st.cols[c].length) return;
       const pad = el('button', 'col-pad');
       Object.assign(pad.style, { left: p.x + 'px', top: p.y + 'px', width: p.w + 'px', height: p.h + 'px' });
+      pad.dataset.col = c;
       pad.setAttribute('aria-label', `Column ${c + 1} (empty)`);
       pad.addEventListener('click', () => this.tapPad(c));
       this.boardEl.append(pad);
@@ -569,6 +585,10 @@ export class UI {
       }
     }
     this.renderer.setSelection(this.session.selection, this.session.selection ? this.session.legalTargets() : [], this.hintMove);
+    if (this.btnDeal) {
+      this.btnDeal.disabled = st.stock.length === 0;
+      this.btnDeal.title = st.stock.length === 0 ? 'The stock is empty' : '';
+    }
     this.updateClock();
   }
 
@@ -646,21 +666,23 @@ export class UI {
   onPointerUp(e) {
     if (!this.drag) return;
     const wasActive = this.drag.active;
-    const { col, idx } = this.drag;
     this.drag = null;
-    if (wasActive) {
-      this._dragged = true;
-      const elAt = document.elementFromPoint(e.clientX, e.clientY);
-      const tcol = elAt?.dataset?.col != null ? Number(elAt.dataset.col) : null;
-      if (tcol != null && tcol !== col) {
-        this.session.selection = this.session.selection; // keep
-        this.session.commitMove(tcol);
-        this.afterAction();
+    if (!wasActive) return;
+    this._dragged = true;
+    const elAt = document.elementFromPoint(e.clientX, e.clientY);
+    const target = elAt?.closest?.('[data-col]'); // spans inside cards count as their card
+    const tcol = target?.dataset?.col != null ? Number(target.dataset.col) : null;
+    if (tcol != null) {
+      if (tcol === this.session.selection?.from) {
+        // Dropped back on its origin: set the run down quietly.
+        this.session.selection = null;
+        this.audio.event('deselect');
       } else {
-        const pad = elAt?.classList?.contains('col-pad');
-        if (pad) { this.session.commitMove([...this.boardEl.querySelectorAll('.col-pad')].indexOf(elAt)); this.afterAction(); }
+        this.session.commitMove(tcol); // covers cards and empty-column pads alike
       }
+      this.afterAction();
     }
+    // Dropped over no column: the run stays lifted so the player can re-aim.
   }
 
   onKey(e) {
@@ -705,6 +727,8 @@ export class UI {
       this.syncBoard();
     } else if (this.session.inRound()) {
       this.showPause();
+    } else if (this.session.machine === 'paused' && !this.overlay.querySelector('.modal')) {
+      this.showPause(); // paused with the modal dismissed (backdrop click): reopen it
     }
   }
 
@@ -728,6 +752,7 @@ export class UI {
     if (!this.session.inRound()) return;
     this.hintMove = null;
     const r = this.session.deal();
+    if (r?.error) { this.toast(reasonText(r.error), 2500); this.announce(reasonText(r.error)); }
     this.afterAction();
     return r;
   }
@@ -749,6 +774,8 @@ export class UI {
     } else if (h?.none) {
       this.announce(h.canDeal ? 'No moves — deal from the stock.' : 'No legal moves remain.');
       this.toast(h.canDeal ? 'No moves available — deal from the stock.' : 'No legal moves remain.');
+    } else if (h?.error) {
+      this.toast(reasonText(h.error), 2500);
     }
   }
 
@@ -771,6 +798,12 @@ export class UI {
         const lm = Math.floor(left / 60000), ls = Math.floor((left % 60000) / 1000);
         txt = `⏱ ${lm}:${String(ls).padStart(2, '0')}`;
         this.clockEl.classList.toggle('urgent', left < 60000);
+        if (left <= 0 && st.status === 'active' && this.session.machine === 'active') {
+          // The clock expired between inputs: route a heartbeat through the
+          // rules engine so the time-limit loss lands authoritatively.
+          this.session.dispatch({ type: 'note' });
+          return;
+        }
       }
       this.clockEl.textContent = txt;
     };
@@ -977,5 +1010,7 @@ export function reasonText(reason) {
     'empty-column': 'you cannot deal while a column is empty',
     'round-over': 'the round is over',
     'out-of-bounds': 'off the table',
+    'stock-empty': 'the stock is empty',
+    'hints-disabled': 'hints are disabled for this round',
   }[reason] || reason;
 }

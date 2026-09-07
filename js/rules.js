@@ -483,15 +483,32 @@ export function hashState(state) {
 
 // Replay an envelope and report per-checkpoint validity (used by the
 // authoritative validation script and by the property tests).
+// Besides applyCommand commands, envelopes may carry session-level undo
+// markers: { id, at, type:'undo', toId } — restore the state produced by
+// command toId (0 = the initial state) and count one undo. Undone commands
+// stay in the log; later commands simply reuse the ids past toId.
 export function replay(envelope) {
   const def = envelope.init;
   let state = createGame(def);
+  const history = [{ id: 0, state }];
   const checkpoints = [{ after: 0, hash: hashState(state) }];
   const events = [];
   for (const cmd of envelope.commands) {
+    if (cmd && cmd.type === 'undo') {
+      const target = history.findLast((h) => h.id === cmd.toId);
+      if (!target) return { ok: false, error: 'undo-target-missing', atCommand: cmd.id };
+      const undos = state.undos + 1;
+      state = cloneState(target.state);
+      state.undos = undos;
+      history.push({ id: cmd.id, state });
+      events.push({ type: 'undo', toId: cmd.toId });
+      checkpoints.push({ after: cmd.id, hash: hashState(state) });
+      continue;
+    }
     const r = applyCommand(state, cmd);
     if (r.error) return { ok: false, error: r.error, atCommand: cmd.id };
     state = r.state;
+    history.push({ id: cmd.id, state });
     events.push(...(r.events || []));
     checkpoints.push({ after: cmd.id, hash: hashState(state) });
   }

@@ -32,7 +32,7 @@ const MIME = {
   '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
   '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml',
   '.png': 'image/png', '.ico': 'image/x-icon', '.wav': 'audio/wav',
-  '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg', '.opus': 'audio/ogg',
+  '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg', '.opus': 'audio/ogg', '.webp': 'image/webp',
   '.glb': 'model/gltf-binary', '.woff2': 'font/woff2', '.ts': 'video/mp2t',
 };
 
@@ -49,8 +49,9 @@ const server = http.createServer((req, res) => {
     res.end(data);
   });
 });
-await new Promise((r) => server.listen(0, '127.0.0.1', r));
-const BASE = `http://127.0.0.1:${server.address().port}`;
+// PORT pins the embedded static server (default: ephemeral); BASE_URL targets an already running server instead.
+if (!process.env.BASE_URL) await new Promise((r) => server.listen(Number(process.env.PORT) || 0, '127.0.0.1', r));
+const BASE = process.env.BASE_URL || `http://127.0.0.1:${server.address().port}`;
 
 // Benign GPU/swiftshader noise (same regex as tools/production_game_audit.mjs).
 const browserNoise = /GL Driver Message|GPU stall due to ReadPixels|Automatic fallback to software WebGL|EnableWebGLDeveloperExtensions/i;
@@ -237,5 +238,5 @@ try {
   console.log('\nE2E PASS — both viewport passes clean, no page errors');
 } finally {
   await browser.close();
-  server.close();
+  if (server.listening) server.close();
 }

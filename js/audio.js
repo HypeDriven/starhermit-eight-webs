@@ -20,7 +20,15 @@ const SFX_BY_EVENT = {
   'win': 'round-win',
   'lose': 'round-lose',
   'tick': 'clock-tick',
+  'time-warning': 'clock-warning',
+  'achievement': 'achievement-unlock',
+  'lesson-step': 'lesson-step',
+  'pause': 'pause-open',
 };
+
+// Looped ambience bed (sfx/ambience-study.opus). The procedural noise bed in
+// startAmbience() plays until this clip has decoded, and stays if it never does.
+const AMBIENCE_CLIP = 'ambience-study';
 
 export class AudioEngine {
   constructor(settings, captionFn) {
@@ -176,6 +184,16 @@ export class AudioEngine {
         this.caption('round won'); break;
       case 'lose':     if (!sfx) this.blip('effects', { freq: 220, dur: 0.4, gain: 0.12, slide: -80 }); this.caption('round over'); break;
       case 'tick':     if (!sfx) this.blip('effects', { freq: 880, dur: 0.03, gain: 0.05 }); break;
+      case 'time-warning':
+        if (!sfx) { this.blip('effects', { freq: 990, dur: 0.06, gain: 0.09 }); setTimeout(() => this.blip('effects', { freq: 990, dur: 0.06, gain: 0.09 }), 120); }
+        this.caption('one minute left'); break;
+      case 'achievement':
+        if (!sfx) [659, 784, 988, 1319].forEach((f, i) => setTimeout(() => this.blip('effects', { freq: f, dur: 0.18, gain: 0.12, type: 'triangle' }), i * 90));
+        this.caption('achievement unlocked'); break;
+      case 'lesson-step':
+        if (!sfx) { this.blip('effects', { freq: 520, dur: 0.07, gain: 0.09, type: 'triangle' }); setTimeout(() => this.blip('effects', { freq: 660, dur: 0.09, gain: 0.09, type: 'triangle' }), 100); }
+        this.caption('next lesson step'); break;
+      case 'pause':    if (!sfx) this.noise('effects', { dur: 0.18, gain: 0.08, freq: 500 }); this.caption('paused'); break;
     }
   }
 
@@ -195,6 +213,27 @@ export class AudioEngine {
     src.connect(filt); filt.connect(g); g.connect(this.buses.ambience);
     src.start();
     this.ambienceNodes = { src, g };
+    this.loadAmbienceClip();
+  }
+
+  // Swap the synthesized bed for the authored room-tone loop once it decodes.
+  loadAmbienceClip() {
+    if (this.ambienceClipTried || !this.ctx) return;
+    this.ambienceClipTried = true;
+    fetch(`sfx/${AMBIENCE_CLIP}.opus`)
+      .then((r) => { if (!r.ok) throw new Error(`sfx ${AMBIENCE_CLIP}: HTTP ${r.status}`); return r.arrayBuffer(); })
+      .then((raw) => this.ctx ? this.ctx.decodeAudioData(raw) : null)
+      .then((buf) => {
+        if (!buf || !this.ctx || !this.ambienceNodes) return;
+        const src = this.ctx.createBufferSource();
+        src.buffer = buf; src.loop = true;
+        const g = this.ctx.createGain(); g.gain.value = 0.6;
+        src.connect(g); g.connect(this.buses.ambience);
+        src.start();
+        try { this.ambienceNodes.src.stop(); } catch {}
+        this.ambienceNodes = { src, g, clip: true };
+      })
+      .catch(() => { /* synthesized bed keeps playing */ });
   }
 
   stopAmbience() {

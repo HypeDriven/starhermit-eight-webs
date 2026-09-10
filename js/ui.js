@@ -217,6 +217,9 @@ export class UI {
     this.overlay.innerHTML = '';
     const wrap = el('div', 'title-screen');
     const h1 = el('h1', null, 'Eight Webs');
+    const art = el('img', 'title-art');
+    art.src = 'assets/key-art.webp'; art.alt = ''; art.decoding = 'async';
+    art.addEventListener('error', () => art.remove()); // decorative: vanish if missing
     const tag = el('p', 'tagline', 'Weave descending runs of silk thread. Clear all eight webs.');
     const play = this.button('▶ Play', () => this.show('modes'), 'btn btn-primary btn-big');
     const row = el('div', 'title-row');
@@ -232,7 +235,7 @@ export class UI {
       : null;
     const progress = el('p', 'title-progress',
       `Journey ${Object.keys(this.progress.journey).length}/${JOURNEY.length} · Webs cleared ${this.progress.websCleared}`);
-    wrap.append(h1, tag, play, row);
+    wrap.append(h1, art, tag, play, row);
     if (resume) wrap.append(resume);
     wrap.append(progress);
     this.overlay.append(wrap);
@@ -398,6 +401,7 @@ export class UI {
   // --- Round start ------------------------------------------------------------
   startRound(def) {
     this.hintMove = null;
+    this._timeWarned = false;
     this.session.startRound(def);
     this.show('play');
     this.syncBoard();
@@ -798,6 +802,11 @@ export class UI {
         const lm = Math.floor(left / 60000), ls = Math.floor((left % 60000) / 1000);
         txt = `⏱ ${lm}:${String(ls).padStart(2, '0')}`;
         this.clockEl.classList.toggle('urgent', left < 60000);
+        if (left < 60000 && left > 0 && !this._timeWarned && st.status === 'active' && this.session.machine === 'active') {
+          this._timeWarned = true; // one-shot per round
+          this.audio.event('time-warning');
+          this.announce('One minute left.');
+        }
         if (left <= 0 && st.status === 'active' && this.session.machine === 'active') {
           // The clock expired between inputs: route a heartbeat through the
           // rules engine so the time-limit loss lands authoritatively.
@@ -814,6 +823,7 @@ export class UI {
   // --- Pause / settings ---------------------------------------------------------
   showPause(restored = false) {
     if (this.session.inRound() || this.session.machine === 'paused') this.session.pause('user');
+    this.audio.event('pause');
     this.syncBoard();
     this.modal('Paused', (body, close) => {
       const resume = this.button('Resume', () => { close(); this.session.resume(); this.syncBoard(); }, 'btn btn-primary btn-big');
@@ -907,7 +917,7 @@ export class UI {
       }
       case 'select': this.syncBoard(); break;
       case 'lesson-step': {
-        if (e.step) { this.toast(e.step.text, 6000); this.announce(e.step.text); }
+        if (e.step) { this.audio.event('lesson-step'); this.toast(e.step.text, 6000); this.announce(e.step.text); }
         else this.toast('Lesson complete when the web clears!', 3000);
         break;
       }
@@ -952,6 +962,11 @@ export class UI {
     const headline = won ? '🕸 All webs cleared!' : st.status === 'aborted' ? 'Round abandoned' : 'The weave holds…';
     this.modal(headline, (body, close) => {
       const s = st.score;
+      const art = el('img', 'results-art');
+      art.src = won ? 'assets/results-win.webp' : 'assets/results-over.webp';
+      art.alt = ''; art.decoding = 'async';
+      art.addEventListener('error', () => art.remove()); // decorative: vanish if missing
+      body.append(art);
       const table = el('dl', 'score-breakdown');
       const rows = [
         ['Base', s.base], ['Moves', s.movePenalty], ['Webs', `+${s.runs}`],
@@ -967,6 +982,7 @@ export class UI {
           ach.append(el('p', 'achievement', `🏅 ${a?.name || k} — ${a?.desc || ''}`));
         }
         body.append(ach);
+        setTimeout(() => this.audio.event('achievement'), 700); // after the win/lose sting
         this.announce(`Achievement unlocked: ${newly.join(', ')}`);
       }
       const next = this.nextRecommended();

@@ -126,6 +126,12 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible, select:focu
   text-align: center;
 }
 .title-screen h1 { font-size: clamp(2rem, 7vw, 3.4rem); letter-spacing: .06em; }
+.title-art {
+  width: min(640px, 92vw); aspect-ratio: 16 / 9; max-height: min(30dvh, 300px); object-fit: cover;
+  background: var(--felt); border-radius: 12px; border: 1px solid var(--rule); box-shadow: 0 10px 30px rgba(0,0,0,.25);
+}
+.results-art { width: 100%; aspect-ratio: 16 / 9; max-height: 150px; object-fit: cover; background: var(--felt); border-radius: 10px; border: 1px solid var(--rule); }
+@media (max-height: 500px) { .title-art, .results-art { display: none; } } /* short viewports keep controls on screen */
 .tagline { opacity: .7; max-width: 70ch; }
 .title-row { display: flex; flex-wrap: wrap; gap: .5rem; justify-content: center; }
 .title-progress { opacity: .6; font-size: .9rem; }

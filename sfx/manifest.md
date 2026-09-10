@@ -16,3 +16,8 @@ Generated with MOSS-SoundEffect v2.0, 48 kHz mono Opus (96 kbps VBR, loudness-no
 | round-win.opus | win | A joyful short victory fanfare of bright bells and a rising harp glissando, celebratory finish. |
 | round-lose.opus | lose | A soft descending muted marimba phrase, a gentle disappointed fall, not harsh. |
 | clock-tick.opus | tick | A single dry mechanical clock tick, a very short quiet wooden click. |
+| clock-warning.opus | time-warning | A single soft but urgent double tick of a small brass mantel clock with a faint bell overtone, brief warning. |
+| achievement-unlock.opus | achievement | A warm bright glockenspiel arpeggio rising quickly with a soft sparkling shimmer, rewarding unlock. |
+| lesson-step.opus | lesson-step | A gentle two-note wooden xylophone tap, soft and encouraging, like a page turning cue. |
+| pause-open.opus | pause | A soft felt-lined wooden drawer sliding open with a quiet muted thump at the end. |
+| ambience-study.opus | ambience | Quiet room tone of a calm wood-panelled study: faint soft wall clock ticking, distant muffled birdsong through a closed window, gentle warm air hum, no music, no voices. |

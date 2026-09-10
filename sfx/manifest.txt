@@ -1,0 +1,21 @@
+# Eight Webs — SFX manifest (canonical). One clip per line:
+# file | event id (AudioEngine.event name, js/audio.js SFX_BY_EVENT; "ambience" is the loop loaded by loadAmbienceClip) | description of the sound | usage context
+# Clips: MOSS-SoundEffect v2.0, 48 kHz mono Opus 96 kbps VBR, loudness-normalised (-20 LUFS), 100 inference steps. One-shots play on the effects bus, the loop on the ambience bus.
+# Every event also has a synthesized fallback in js/audio.js that plays while its clip is loading or if the fetch/decode fails.
+card-select.opus | select | A single playing card tapped softly against a felt-covered card table, short crisp papery snap | A face-up run is lifted (tap/click/Enter) and every menu button press (UI.button)
+card-deselect.opus | deselect | A playing card gently laid back down onto a small stack of cards, quiet soft paper slide | Lifted run set back down: Escape, tapping the run again, or dropping a drag on its own column
+card-move.opus | move | A playing card sliding across a wooden card table with a light papery swish and a soft landing | Rules 'move' event: a run landed on a legal column (UI.onEvent)
+invalid-move.opus | invalid | A dull wooden knock on a card table followed by a short muted card slap, negative feedback thud | Rules 'invalid' event or session 'invalid' (rank mismatch, broken run, deal with an empty column)
+card-flip.opus | flip | A playing card flipped over with a quick snappy paper flick, crisp and light | Rules 'flip' event: an uncovered face-down card turns face-up
+deal-row.opus | deal | A row of playing cards dealt rapidly across a felt table, a quick sequence of overlapping papery swishes | Rules 'deal' event: one stock packet dealt across all ten columns (Deal button, D key, stock packet)
+web-complete.opus | run-complete | A triumphant ascending three-note chime like small brass bells with a shimmering tail, celebratory | Rules 'run-complete' event: a King-to-Ace same-thread run lifts off to a foundation web
+hint-chime.opus | hint | A soft high glass-bell chime with a gentle sparkle, brief and helpful | Hint button / H key showed a dashed-outline hint move (UI.doHint)
+undo-whoosh.opus | undo | A quick reversed airy whoosh, like a card being pulled backward through the air | Undo button / U key restored the previous snapshot (UI.doUndo)
+round-win.opus | win | A joyful short victory fanfare of bright bells and a rising harp glissando, celebratory finish | Rules 'win' event: web goal reached, results modal opens
+round-lose.opus | lose | A soft descending muted marimba phrase, a gentle disappointed fall, not harsh | Rules 'lose' event: move limit, time limit or no moves with an empty stock
+clock-tick.opus | tick | A single dry mechanical clock tick, a very short quiet wooden click | Each beat of the 3-2-1 countdown before a timed/untimed round goes active (UI.countdown)
+clock-warning.opus | time-warning | A single soft but urgent double tick of a small brass mantel clock with a faint bell overtone, brief warning | One-shot when a timed round's clock first drops under 60 s and the top-bar clock turns red (UI.updateClock)
+achievement-unlock.opus | achievement | A warm bright glockenspiel arpeggio rising quickly with a soft sparkling shimmer, rewarding unlock | Results modal lists a newly unlocked achievement; plays 0.7 s after the win/lose sting (UI.onRoundEnd)
+lesson-step.opus | lesson-step | A gentle two-note wooden xylophone tap, soft and encouraging, like a page turning cue | A Learn lesson advanced to its next instruction toast (UI.onEvent 'lesson-step')
+pause-open.opus | pause | A soft felt-lined wooden drawer sliding open with a quiet muted thump at the end | Pause modal opens (☰ button, Escape, gamepad Start, restoring a saved round) (UI.showPause)
+ambience-study.opus | ambience | Quiet room tone of a calm wood-panelled study: faint soft wall clock ticking, distant muffled birdsong through a closed window, gentle warm air hum | 12 s loop on the ambience bus from the first gesture; replaces the synthesized noise bed once decoded (AudioEngine.loadAmbienceClip)

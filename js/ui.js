@@ -544,7 +544,7 @@ export class UI {
     this.syncRails();
     const W = this.playfield.clientWidth || 800;
     const H = this.playfield.clientHeight || 600;
-    const L = computeLayout(st, W, H);
+    const L = computeLayout(st, W, H, { coarse: window.matchMedia('(pointer: coarse)').matches });
     this.layout = L;
     this.renderer.sync(st);
 

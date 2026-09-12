@@ -389,10 +389,14 @@ export class Platform {
   }
 
   async reportAchievements(keys) {
-    if (!this.hosted) return;
+    if (!this.hosted || this._achievementsUnavailable) return;
     try {
-      await this.api('/achievements', { playerId: this.identityId, keys });
-    } catch { /* durable locally */ }
+      await this.api('/achievements', { playerId: this.identityId, keys }, { retries: 0 });
+    } catch (e) {
+      // Own-server route not routed on this host: achievements stay durable
+      // locally; stop retrying for this session instead of erroring on every win.
+      if (/404/.test(String(e && e.message))) this._achievementsUnavailable = true;
+    }
   }
 
   async fetchLeaderboard(board = 'global') {

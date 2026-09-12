@@ -21,21 +21,31 @@ export const QUALITY_TIERS = {
 // Shared layout model (px within the playfield rect). UI and 3D both use it.
 // ---------------------------------------------------------------------------
 
-export function computeLayout(state, W, H) {
-  const gap = Math.max(6, Math.round(W * 0.008));
+export function computeLayout(state, W, H, opts = {}) {
+  const narrow = W < 480;
+  const gap = narrow ? 3 : Math.max(6, Math.round(W * 0.008));
   const topBar = Math.round(Math.min(H * 0.16, 120));
-  const cw = Math.min((W - gap * 11) / 10, (H - topBar - gap * 2) / 3.4);
+  const cw = Math.min((W - gap * 11) / 10, (H - topBar - gap * 2) / 3.6);
   const ch = cw * 1.4;
+  // Exposed strip of a face-up card = its tap target and its readable rank:
+  // never thinner than the rank line, wider on touch screens.
+  const minUp = opts.coarse ? 24 : 18;
   const colX = (c) => gap + c * (cw + gap);
   const colY = topBar + gap;
   const avail = H - colY - gap;
   const cols = state.cols.map((col) => {
-    let up = ch * 0.32, dn = ch * 0.16;
+    let up = Math.max(ch * 0.32, minUp), dn = ch * 0.16;
     const natural = col.reduce((h, c, i) => h + (i === 0 ? ch : c.u ? up : dn), 0);
     if (natural > avail && col.length > 1) {
+      // Compress face-down cards first, then face-up ones down to the rank line.
       const over = (natural - avail) / (col.length - 1);
-      up = Math.max(6, up - over);
-      dn = Math.max(5, dn - over);
+      dn = Math.max(4, dn - over);
+      const stillOver = col.reduce((h, c, i) => h + (i === 0 ? ch : c.u ? up : dn), 0) - avail;
+      if (stillOver > 0) {
+        const ups = col.filter((c, i) => i > 0 && c.u).length || 1;
+        // 13px keeps the rank line legible; below that the column would clip
+        up = Math.max(Math.min(minUp, 13), up - stillOver / ups);
+      }
     }
     const rects = [];
     let y = colY;
@@ -144,6 +154,12 @@ export class TableRenderer {
       this.canvas.classList.add('gl-canvas');
       this.canvas.setAttribute('aria-hidden', 'true'); // DOM mirror owns a11y
       this.container.prepend(this.canvas);
+      // Follow the playfield box (rails, chat sidebar, orientation) so the 3D
+      // layout always matches the DOM cards drawn over it.
+      if (typeof ResizeObserver === 'function') {
+        this._ro = new ResizeObserver(() => { if (this.ok) this.resize(); });
+        this._ro.observe(this.container);
+      }
       this.scene = new THREE.Scene();
       this.camera = new THREE.OrthographicCamera(0, 1, 0, 1, -100, 100);
       this.scene.add(this.props);
@@ -274,9 +290,11 @@ export class TableRenderer {
     const dpr = Math.min(window.devicePixelRatio || 1, 2) * tier.renderScale;
     this.renderer.setPixelRatio(dpr);
     this.renderer.setSize(W, H, false);
-    // Orthographic frustum in CSS px: 3D units map 1:1 to DOM layout.
-    this.camera.left = 0; this.camera.right = W;
-    this.camera.top = 0; this.camera.bottom = H;
+    // Orthographic frustum in CSS px: 3D units map 1:1 to DOM layout. The
+    // frustum is relative to the camera, which sits at the playfield centre,
+    // so the visible range is exactly [0, W] x [0, H] (y down).
+    this.camera.left = -W / 2; this.camera.right = W / 2;
+    this.camera.top = -H / 2; this.camera.bottom = H / 2;
     this.camera.position.set(W / 2, H / 2, 50);
     this.camera.lookAt(W / 2, H / 2, 0);
     this.camera.updateProjectionMatrix();
@@ -307,7 +325,7 @@ export class TableRenderer {
     this.lastState = state;
     const theme = this.getTheme();
     const suits = this.suits || [];
-    const L = computeLayout(state, this.rect.W, this.rect.H);
+    const L = computeLayout(state, this.rect.W, this.rect.H, { coarse: typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(pointer: coarse)').matches });
     this.layout = L;
     let ci = 0;
     const place = (card, rect, opts = {}) => {
@@ -450,6 +468,7 @@ export class TableRenderer {
 
   dispose() {
     cancelAnimationFrame(this._raf);
+    if (this._ro) { this._ro.disconnect(); this._ro = null; }
     this.renderer?.dispose();
     this.cardGeo?.dispose();
     this.markerGeo?.dispose();

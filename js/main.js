@@ -14,7 +14,7 @@ async function boot() {
 
   // Host handshake: read scope from the launch token; sync the server clock so
   // countdowns and daily boundaries follow platform time.
-  platform.syncServerTime();
+  platform.init(); // token handshake, profile, clock probe (own-backend gate)
 
   let ui = null;
   const audio = new AudioEngine(

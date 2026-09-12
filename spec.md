@@ -227,16 +227,17 @@ Danger is `#c0392b` (`#eb5757` on Midnight). Threads: Crimson `#c0392b` ●, Amb
 
 ## 12. StarHermit integration
 
-Conventions follow https://wiki.starhermit.com/ (manifest, `launch_token`, `/api/v1/*`).
+Conventions follow https://wiki.starhermit.com/ (fragment `#game_token` launch token, Bearer auth, `/api/v1/*`).
 
 | Feature | Status | Where |
 |---|---|---|
 | Manifest | Used: `name`, `launch`, `owner`, `server`, `cover` | `starhermit.txt` |
-| Identity | Anonymous local id `eightwebs:player`; a `launch_token` query parameter is forwarded as a Bearer header and never persisted | `Platform` |
-| Hosted detection | `GET /api/v1/time` must succeed; otherwise every hosted call is a local no-op | `Platform.syncServerTime` |
+| Identity | `#game_token=<jwt>` read from the URL fragment (optional `&session_id=`, stripped after the read; `?launch_token=` kept for local dev), decoded for `sub` + `game_scope` (never hard-coded), sent as a Bearer header on every call, re-minted every 45 min via `POST /api/v1/games/{slug}/launch-token` (60 s retry), never persisted. The display name is the profile nickname from `GET /api/v1/users/{sub}/profile` (never usernames, never `/api/v1/me`; `Player <id8>` fallback), shown above the daily board with cloud-sync status; submissions and achievement reports carry the account id (the anonymous `eightwebs:player` id remains the offline fallback) | `Platform` |
+| Hosted detection | `GET /api/v1/time` must succeed for the own-server backend (`hosted` gates the score/leaderboard/achievement routes, graceful local fallback otherwise); a launch token independently enables platform identity + cloud save (`tokenHosted`) | `Platform.syncServerTime` |
 | Server clock | Round-trip-adjusted offset stamps replay envelopes | `serverOffsetMs` |
-| Leaderboards | Ranked content (Daily, Mastery stages, Challenges) POSTs `{board, envelope}` to `/api/v1/score`; boards are `daily:<UTC day>` or `global:<n>suit`; the server replays the envelope, checks the claimed total/status, rejects sub-150 ms-per-move play, keeps the top 100 and returns rank. Scores screen shows today's daily board (top 20) | `submitScore`, `server.js` |
-| Achievements | Local first; new keys POSTed to `/api/v1/achievements` (server validates keys, idempotent) | `reportAchievements` |
+| Cloud save | When a launch token is present, the progress document mirrors to one zip+base64 slot at `GET/PUT /api/v1/me/cloud-saves/{slug}` — remote wins on boot, saves debounce 2 s and flush on `pagehide`/hidden with keepalive; localStorage stays the offline cache | `Platform.saveLocal`, `Platform.loadCloudSave` |
+| Leaderboards | Ranked content (Daily, Mastery stages, Challenges) POSTs `{board, envelope, identity:{playerId, name}}` to `/api/v1/score` (Bearer when hosted); boards are `daily:<UTC day>` or `global:<n>suit`; the server replays the envelope, checks the claimed total/status, rejects sub-150 ms-per-move play, keeps the top 100 (with player names) and returns rank. Scores screen shows today's daily board (top 20) with nicknames and your own row marked | `submitScore`, `server.js` |
+| Achievements | Local first (part of the cloud-mirrored progress doc); new keys POSTed to `/api/v1/achievements` keyed by the account id (server validates keys, idempotent) | `reportAchievements` |
 | Sessions / presence | Not used by the client. The server also exposes `/api/v1/daily/start|command|session/:id` (authoritative daily sessions) and the legacy `/api/session`, `/api/settings`, `/api/game/*` routes from `starhermit_zh.txt`; the browser plays dailies locally and submits the envelope instead | `server.js` |
 | Telemetry | Stubbed: `Platform.telemetry` only beacons with explicit consent, and nothing sets `consent = true` | `platform.js` |
 | Multiplayer | None; competition is asynchronous through the boards | — |

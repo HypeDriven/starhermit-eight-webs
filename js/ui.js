@@ -59,6 +59,34 @@ export class UI {
     this.suits = this.themedSuits();
     this.build();
     this.applySettings();
+    // Hosted: the remote progress document wins over the local cache.
+    if (this.platform.tokenHosted) {
+      this.platform.onSync?.(() => this.renderStatus?.());
+      this.platform.fetchProfile?.().then(() => this.renderStatus?.()).catch(() => {});
+      this.platform.loadCloudSave?.().then((remoteJson) => {
+        if (!remoteJson) return this.renderStatus?.();
+        try {
+          const remote = JSON.parse(remoteJson);
+          if (remote && remote.v === 1) {
+            this.progress = remote;
+            this.saveProgress(); // local cache mirrors the remote doc
+            this.applySettings();
+          }
+        } catch { /* corrupt remote: keep local */ }
+        this.renderStatus?.();
+      }).catch(() => {});
+    }
+  }
+
+  // Account + cloud-sync status shown above the daily board.
+  renderStatus() {
+    const P = this.platform;
+    if (!P?.tokenHosted) return null;
+    const name = P.profile ? P.profile.name : '…';
+    return 'Playing as ' + name + ' · ' +
+      (P.sync === 'synced' ? 'progress synced'
+        : P.sync === 'saving' ? 'saving…'
+        : 'cloud sync pending');
   }
 
   themedSuits() {
@@ -367,12 +395,15 @@ export class UI {
         lb.append(el('p', 'dim', 'Hosted leaderboards appear here when played through StarHermit.'));
         return;
       }
+      const status = this.renderStatus?.();
+      if (status) lb.append(el('p', 'dim', status));
       lb.append(el('h2', null, `Daily board — ${day}`));
       if (!entries.length) { lb.append(el('p', 'dim', 'No validated scores yet today.')); return; }
       for (const e of entries) {
         const t = `${Math.floor(e.elapsedMs / 60000)}:${String(Math.floor(e.elapsedMs / 1000) % 60).padStart(2, '0')}`;
+        const who = e.name ? (e.playerId && e.playerId === this.platform.identityId ? 'You (' + e.name + ')' : e.name) : 'prospector';
         lb.append(el('div', 'score-row',
-          `#${e.rank} — score ${e.score} · webs ${e.foundations} · ${e.moves} moves · ${e.invalid} invalid · ${t}${e.validated ? ' · validated' : ''}`));
+          `#${e.rank} — ${who} — score ${e.score} · webs ${e.foundations} · ${e.moves} moves · ${e.invalid} invalid · ${t}${e.validated ? ' · validated' : ''}`));
       }
     }).catch(() => {});
   }

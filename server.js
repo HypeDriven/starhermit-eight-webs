@@ -244,7 +244,10 @@ route('POST', '/api/v1/score', (req, res, params, body) => {
     const day = envelope.contentId.slice(6);
     if (store.exclusions[day]) return fail(res, 'day-excluded', 'Day excluded from ranking');
   }
+  const identity = body.identity || {};
   const entry = {
+    name: String(identity.name || '').slice(0, 24),
+    playerId: String(identity.playerId || '').slice(0, 64),
     score: final.score.total, status: final.status, foundations: final.foundations,
     moves: final.moves, invalid: final.invalid, elapsedMs: final.elapsedMs,
     seed: envelope.seed, contentId: envelope.contentId, contentV: envelope.contentV,
@@ -266,7 +269,8 @@ route('POST', '/api/v1/score', (req, res, params, body) => {
 // GET /api/v1/leaderboard/:board?scope=global|friends
 route('GET', '/api/v1/leaderboard/:board', (req, res, params) => {
   const list = (store.boards[params.board] || []).slice(0, 20).map((e, i) => ({
-    rank: i + 1, score: e.score, status: e.status, foundations: e.foundations,
+    rank: i + 1, name: e.name || '', playerId: e.playerId || '',
+    you: false, score: e.score, status: e.status, foundations: e.foundations,
     moves: e.moves, invalid: e.invalid, elapsedMs: e.elapsedMs,
     seed: e.seed, contentId: e.contentId, assists: e.assists, validated: e.validated,
   }));

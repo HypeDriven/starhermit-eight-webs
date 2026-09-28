@@ -70,12 +70,12 @@ async function playthrough(ctxOpts, tag, maxHintMoves) {
   const errors = [];
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
   page.on('console', (m) => {
-    if (m.type() !== 'error') return;
+    if (m.type() !== 'error' && m.type() !== 'warning') return;
     const text = m.text();
     if (browserNoise.test(text)) return;
     // Offline-mode probe of the (absent) StarHermit backend: expected 404s.
     if (text.includes('Failed to load resource') && (m.location()?.url || '').includes('/api/v1/')) return;
-    errors.push(`console: ${text}`);
+    errors.push(`console ${m.type()}: ${text}`);
   });
 
   // Click a card by column/index. Non-top cards are covered by the card below
@@ -102,6 +102,45 @@ async function playthrough(ctxOpts, tag, maxHintMoves) {
       const h1 = await page.textContent('.title-screen h1');
       if (!h1?.includes('Eight Webs')) throw new Error(`unexpected title: ${h1}`);
       await page.screenshot({ path: SHOT('title', tag) });
+    });
+
+    await step(`[${tag}] Settings → Graphics: presets, override, persistence`, async () => {
+      const bodyPreset = () => page.evaluate(() => document.body.dataset.gfxPreset);
+      const saved = () => page.evaluate(() => JSON.parse(localStorage.getItem('eightwebs:settings') || '{}').graphics || {});
+      const openSettings = async () => {
+        await page.getByRole('button', { name: 'Settings' }).click();
+        await page.locator('#gfx-section').scrollIntoViewIfNeeded();
+      };
+      // Headless Chrome renders on SwiftShader: Auto resolves to Low.
+      if (await bodyPreset() !== 'low') throw new Error(`auto preset under SwiftShader: ${await bodyPreset()}`);
+      await openSettings();
+      const autoLabel = await page.locator('#gfx-preset option[value="auto"]').textContent();
+      if (!/Auto \(detected: Low\)/.test(autoLabel)) throw new Error(`auto label: ${autoLabel}`);
+      await page.locator('#gfx-preset').selectOption('low');
+      if (await bodyPreset() !== 'low' || (await saved()).preset !== 'low') throw new Error('Low not applied');
+      await page.locator('#gfx-preset').selectOption('ultra');
+      await page.waitForTimeout(600); // a few frames through the full Ultra chain
+      if (await bodyPreset() !== 'ultra') throw new Error('Ultra not applied');
+      await page.locator('#gfx-preset').selectOption('high');
+      if (await bodyPreset() !== 'high') throw new Error('High not applied');
+      if (!(await page.locator('#gfx-bloom option[value="preset"]').textContent()).includes('(On)')) throw new Error('bloom preset label');
+      await page.locator('#gfx-bloom').selectOption('off');
+      await page.waitForFunction(() => !/bloom/.test(document.querySelector('#gfx-summary').textContent));
+      if ((await saved()).bloom !== 'off') throw new Error('bloom override not saved');
+      if (!(await page.locator('.shell').getAttribute('class')).includes('gfx-detailed')) throw new Error('High should use detailed surfaces');
+      await page.screenshot({ path: SHOT('graphics', tag) });
+      await page.reload({ waitUntil: 'load' });
+      await page.waitForSelector('.title-screen');
+      if (await bodyPreset() !== 'high') throw new Error('preset did not survive reload');
+      await openSettings();
+      if (await page.locator('#gfx-preset').inputValue() !== 'high') throw new Error('preset select after reload');
+      if (await page.locator('#gfx-bloom').inputValue() !== 'off') throw new Error('override after reload');
+      // Back to Auto: choosing a preset clears overrides.
+      await page.locator('#gfx-preset').selectOption('auto');
+      if (await page.locator('#gfx-bloom').inputValue() !== 'preset') throw new Error('preset change kept override');
+      if (await bodyPreset() !== 'low') throw new Error('Auto not restored');
+      await page.getByRole('button', { name: 'Close' }).click();
+      await page.waitForSelector('.modal', { state: 'detached' });
     });
 
     await step(`[${tag}] Learn screen → lesson 1 starts`, async () => {

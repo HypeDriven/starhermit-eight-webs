@@ -19,25 +19,28 @@ Present-tense description of the shipped game. Every statement below is true of 
 
 | Path | Responsibility |
 |---|---|
-| `index.html` | Shell markup, all CSS (theme variables, three breakpoints, overlays, settings), import map for `three` |
+| `index.html` | Shell markup, all CSS (theme variables, three breakpoints, overlays, settings, Graphics panel, surface-detail card finish, FPS readout), import map for `three` and `three/addons/` |
 | `js/main.js` | Boot: platform time probe, AudioEngine/Session/TableRenderer/UI wiring, first-gesture audio start, `window.__eightwebs` debug handle |
 | `js/rules.js` | Pure deterministic rules engine: deck, layout, legality, `applyCommand`, scoring, terminal states, hashing, replay, tie-break |
 | `js/content.js` | Suits, five themes, `makeDef`, 5 lessons, 40 Journey stages, daily generator, practice difficulties, 4 challenges, 5 achievements, offline validators |
 | `js/session.js` | Session controller: machine states, selection/tap semantics, undo snapshots, lesson gating, autosave, replay envelope |
 | `js/ui.js` | DOM shell: screens, modals, board mirror, input (pointer/keyboard/gamepad), settings, progression, results |
-| `js/render.js` | Three.js table: `computeLayout` (shared with UI), pooled card meshes, procedural card textures, markers, particles, quality tiers |
+| `js/render.js` | Three.js table: `computeLayout` (shared with UI), pooled card meshes, procedural card/felt/wood textures, corner webs, silk motes, markers, particles, lighting + shadows, post-processing chain, `setGraphics`/`graphicsInfo`, adaptive resolution |
+| `js/gfx.js` | Pure graphics quality model: presets, categories, `detectPreset`, `resolve`, `presetTier`, `choosePreset`, `describe` |
+| `js/gfx-i18n.js` | Settings/Graphics panel strings in the nine supported locales, `pickLocale` |
 | `js/render-helpers.js` | Re-exports `createStream`/`rankLabel` so render never imports rules-only internals |
 | `js/audio.js` | WebAudio buses, authored Opus clips with synthesized fallbacks, ambience loop, adaptive music, captions |
 | `js/platform.js` | localStorage persistence, hosted REST adapter (`/api/v1/*`) gated by a time probe, score/achievement submission, telemetry stub |
 | `server.js` | Dependency-free Node server: static files, `/api/v1/time`, daily descriptors, replay-validated score submission, leaderboards, achievements, plus a legacy `/api/session` and `/api/game/*` state API |
 | `starhermit.txt` | Platform manifest (`name`, `launch`, `owner`, `server`, `cover`) |
 | `starhermit_zh.txt` | Chinese-language server/network chapter that the legacy `/api/session` routes follow; the browser client does not call those routes |
-| `tests/run-tests.mjs` | 31 offline rules/content/session tests (`npm test`) |
+| `tests/run-tests.mjs` | 35 offline rules/content/session/graphics-model tests (`npm test`) |
 | `tests/e2e.mjs` | Playwright playthrough of the real UI at desktop and mobile viewports (`npm run test:e2e`) |
 | `sfx/` | 17 Opus clips, `manifest.txt` (canonical), `manifest.json` (generator input), `manifest.md` (generated) |
 | `assets/` | `key-art.webp`, `results-win.webp`, `results-over.webp`, `audio/*.mp3` bundled samples |
 | `coverart.png`, `icon.png`, `favicon.svg` | Store cover (1200x675), launcher icon, tab icon |
 | `vendor/three.module.js`, `vendor/three.core.js` | Three.js r185 |
+| `vendor/addons/` | r185 addons: `postprocessing/` (EffectComposer, RenderPass, ShaderPass, OutputPass, GTAOPass, UnrealBloomPass, SMAAPass, Pass, MaskPass), the shaders they import, `math/SimplexNoise.js`, `environments/RoomEnvironment.js` |
 
 ## 2. Vision and design pillars
 
@@ -146,7 +149,7 @@ Input locking: the board ignores taps unless `Session.inRound()` (active or tuto
 
 **Machine (`Session.MACHINE_STATES`)**: `boot → title → … → countdown → active ⇄ paused → resolving → results`; `tutorial` replaces `countdown/active` for lessons; `reconnecting` is entered by restoring a snapshot (as `paused/reconnect`).
 
-**Screens (`UI.show`)**: `title`, `modes`, `journey`, `lessons`, `challenges`, `practice`, `help`, `scores`, `play`. Modals: Paused (Resume, settings fieldset, Help, Restart round, Give up, Leave to title) and Results (art, score table, stats line, achievements, Retry, Next stage/lesson or Journey, Title). Overlays: 3-2-1 countdown, toasts (role=status, 2.5–6 s), audio caption strip.
+**Screens (`UI.show`)**: `title`, `modes`, `journey`, `lessons`, `challenges`, `practice`, `help`, `scores`, `play`. The title row ends with **Settings**, which opens a Settings modal over the title (the same settings fieldset, including Graphics, plus Close). Modals: Paused (Resume, settings fieldset with its Graphics section, Help, Restart round, Give up, Leave to title) and Results (art, score table, stats line, achievements, Retry, Next stage/lesson or Journey, Title). Overlays: 3-2-1 countdown, toasts (role=status, 2.5–6 s), audio caption strip.
 
 **Layout.**
 - ≥ 1024 px wide: three-column grid — Objective rail (150–220 px: goal, hidden count, deals left, score formula, moves/invalid), playfield, Status rail; top bar (☰, title, clock) and bottom tray (Undo, Hint, Deal).
@@ -171,9 +174,11 @@ Input locking: the board ignores taps unless `Session.inRound()` (active or tuto
 
 Danger is `#c0392b` (`#eb5757` on Midnight). Threads: Crimson `#c0392b` ●, Amber `#c97b12` ◆, Jade `#1f8a70` ▲, Indigo `#3457c9` ■; CVD palettes (deuter/protan/tritan) replace the four colours with Okabe-Ito-style sets while glyphs stay.
 
-**Shape and type.** 8–14 px radii on cards, pads and modals; 1.5 px card borders (2.5 px in high contrast); system-ui sans throughout, tabular numerals for clocks and scores, uppercase 0.08 em tracking for rail titles. Card faces are procedural 128x180 canvas textures (rank top-left, glyph centre, mirrored index bottom-right); card backs use the theme felt with five gold thread curves.
+**Shape and type.** 8–14 px radii on cards, pads and modals; 1.5 px card borders (2.5 px in high contrast); system-ui sans throughout, tabular numerals for clocks and scores, uppercase 0.08 em tracking for rail titles. Card faces are procedural 128x180 canvas textures (rank top-left, glyph centre, mirrored index bottom-right); card backs use the theme felt with five gold thread curves. With **Surface detail: Detailed**, the DOM cards get a paper sheen, an inner highlight and a two-layer drop shadow; face-down cards and stock packets carry a faint spider-web pattern (spokes and rings); filled foundations get a highlight; title and menu screens get a soft radial light.
 
-**Motion.** Card poses tween 180 ms cubic-out to authored end states (never cumulative per-frame lerp); a lifted run sits 6 units above the table; bursts are pooled quads with 500 ms life, capped per tier (0 / 200 / 600). With **Reduced motion** on, all tweens snap, the countdown is skipped, and CSS transitions/animations are disabled.
+**Motion.** Card poses tween 180 ms cubic-out to authored end states (never cumulative per-frame lerp); a lifted run sits 6 units above the table; bursts are quads with a 500 ms life (700 ms glowing sparks on the high particle tier), capped at 120 (low) or 600 (high) live particles. With **Reduced motion** on, all tweens snap, the countdown is skipped, and CSS transitions/animations are disabled.
+
+**Graphics.** The table is lit by a warm key directional light from the upper left, a hemisphere sky/ground fill and a small ambient term, with ACES filmic tone mapping and sRGB output. The felt is a tiling procedural fibre texture (colour and bump); the frame rails show a thin clear-coated wood-grain lip inside the playfield edge with a brass-like inlay; faint silk spider webs fill the two lower corners. Cards rest 4 units above the felt, so shadows fall just below and right of each card and a lifted run throws a deeper shadow. Optional effects: key-light PCF shadows (1024/2048/4096 map, frustum fitted to the playfield each resize), image-based reflections from a PMREM-filtered `RoomEnvironment` set per material (felt 0.12, frame 0.45, inlay 1.0), GTAO contact darkening, bloom (threshold 0.9) limited to motes and sparks, a colour grade (gentle S-curve, saturation, warm highlights / cool shadows) with vignette, FXAA/SMAA/MSAA (MSAA on a multisampled composer target), 64 drifting silk motes that twinkle with brief glints (frozen under Reduced motion or `prefers-reduced-motion`), and the high particle tier's additive glowing sparks. The Settings **Graphics** section offers Quality (Auto, detected from the `WEBGL_debug_renderer_info` GPU string: software renderers get Low, discrete GPUs and Apple M get High, others Balanced, touch devices capped at Balanced; Low; Balanced; High; Ultra), Render scale 50–200 %, one override per category ("From preset (…)" by default): Shadows off/low/medium/high, Ambient occlusion off/on/high, Bloom, Colour grade, Anti-aliasing off/FXAA/SMAA/MSAA, Reflections, Particles low/high, Table ambience still/animated (motes), Surface detail plain/detailed (textures, inlay, corner webs, DOM card finish); plus Adaptive resolution (averages 90 frames; above 26 ms steps down 0.1 to 0.6×, below 14 ms back up 0.05) and Show frame rate (bottom-left readout, `pointer-events: none`). A summary line reads "GPU · cost summary · W×H px", and a note appears when post-processing could not be built (the scene then renders without it) or WebGL is missing. Choosing a preset clears overrides; every change applies live and is saved under `graphics` in `eightwebs:settings`. The resolved preset is mirrored on `<body data-gfx-preset>`. Presets: Low = no shadows, no post chain, no reflections, particles low, still table, plain surfaces, pixel ratio capped at 1 (a plain canvas render); Balanced = 1024 shadows, bloom, grade, FXAA, reflections, detailed, cap 1.5; High = 2048 shadows, GTAO, SMAA, cap 2; Ultra = 4096 shadows, full GTAO, MSAA, 1.25× scale. Pixel ratio = `min(dpr, cap) × preset scale × render scale × adaptive scale`; the composer runs only when a post effect is on.
 
 **Hero.** The table. Key art appears only on the title (`assets/key-art.webp`) and the results modal (`results-win.webp` for a win, `results-over.webp` for a loss/abandon); both are decorative `<img>` elements that remove themselves if they fail to load.
 
@@ -213,7 +218,7 @@ Danger is `#c0392b` (`#eb5757` on Midnight). Threads: Crimson `#c0392b` ●, Amb
 
 ## 10. Localization
 
-**Shipped:** English only (`<html lang="en">`; all strings are inline literals in `js/ui.js`, `js/content.js` and `js/audio.js` captions). There is no locale detection, string table or language setting. The required locale set — en-US, en-GB, es-419, es-ES, de-DE, fr-FR, fr-CA, pt-BR, it-IT — is design intent (see §17). Layout already tolerates ~35 % string growth: buttons are content-sized with 44 px minimums, the title row wraps, rails and menus scroll, and the top title truncates with an ellipsis rather than overflowing.
+**Shipped:** English only (`<html lang="en">`; all strings are inline literals in `js/ui.js`, `js/content.js` and `js/audio.js` captions). The only localized UI is the Settings button, Settings title/Close and the Graphics panel (`js/gfx-i18n.js`), shipped in all nine locales below and chosen from `navigator.language` (en-US fallback); there is no language setting. The required locale set — en-US, en-GB, es-419, es-ES, de-DE, fr-FR, fr-CA, pt-BR, it-IT — is design intent (see §17). Layout already tolerates ~35 % string growth: buttons are content-sized with 44 px minimums, the title row wraps, rails and menus scroll, and the top title truncates with an ellipsis rather than overflowing.
 
 ## 11. Accessibility
 
@@ -222,7 +227,7 @@ Danger is `#c0392b` (`#eb5757` on Midnight). Threads: Crimson `#c0392b` ●, Amb
 - **Captions**: every audio cue writes a caption strip; nothing is conveyed by sound alone.
 - **Contrast**: ink on paper ≥ 10:1 in every light theme; **High contrast** raises contrast 15 % and thickens card borders; **Larger text** scales the shell 1.2×; **Left-handed** mirrors the tray order.
 - **Colour vision**: three CVD palettes; thread glyphs are always present.
-- **Reduced motion**: no tweens, no particles, no countdown; also honoured by the renderer.
+- **Reduced motion**: no tweens, no particles, no countdown; also honoured by the renderer (motes freeze), which additionally follows `prefers-reduced-motion`.
 - **Targets**: all buttons ≥ 44×44 px; cards are full-size buttons; haptics (`navigator.vibrate`) can be switched off.
 
 ## 12. StarHermit integration
@@ -247,18 +252,18 @@ Conventions follow https://wiki.starhermit.com/ (fragment `#game_token` launch t
 - **Layering**: `rules.js` (pure) ← `content.js` ← `session.js` ← `ui.js` / `render.js` / `audio.js` ← `main.js`. Rules never import the DOM; render and audio consume immutable snapshots and events only.
 - **Event flow**: `UI` → `Session.tapCard/deal/undo` → `applyCommand` → events → `UI.onEvent` (audio, toasts, announcements, `renderer.eventFx`) → `syncBoard` rebuilds the ≤104 DOM buttons and calls `renderer.sync`.
 - **Determinism**: three independent seeded streams — rules (`deck:<seed>`), decor (`decor:table`), audio variants (`audio:variants`) — so cosmetics never touch rules RNG.
-- **Persistence (localStorage)**: `eightwebs:settings`, `eightwebs:progress`, `eightwebs:history` (last 50), `eightwebs:autosave` (def + serialized state + commands, written after every action, on pause, on background and on leave; cleared at round end), `eightwebs:player`.
+- **Persistence (localStorage)**: `eightwebs:settings` (including the `graphics` object), `eightwebs:progress`, `eightwebs:history` (last 50), `eightwebs:autosave` (def + serialized state + commands, written after every action, on pause, on background and on leave; cleared at round end), `eightwebs:player`.
 - **Clock**: `Session.nowMs` accumulates only while active; `elapsedMs` is stamped into each command; the UI ticks once a second and dispatches a `note` heartbeat when a limit expires so the loss is applied by the rules engine.
-- **Renderer**: orthographic camera whose frustum is the playfield in CSS pixels, so DOM buttons and meshes share `computeLayout`; 104 pooled card meshes, 12 marker quads, key + ambient light, shadow map on medium/high; pixel ratio `min(dpr, 2) × renderScale` (0.66 / 0.85 / 1.0); context loss is handled by rebuilding the pool; hidden tabs stop rendering. If `WebGLRenderer` throws, a compat note appears and the DOM table is the game.
+- **Renderer**: orthographic camera whose frustum is the playfield in CSS pixels; all table objects live in a world group mirrored in y, so layout coordinates (y down) are used directly and DOM buttons and meshes share `computeLayout`; 104 pooled card meshes, 12 marker quads, lights and post chain per the Graphics settings (§8); `EffectComposer` (RenderPass → GTAO → UnrealBloom → grade → OutputPass → SMAA/FXAA) is rebuilt when its key (effects, size, pixel ratio) changes; context loss is handled by rebuilding the pool, textures, environment map and composer; hidden tabs stop rendering. If `WebGLRenderer` throws, a compat note appears and the DOM table is the game.
 - **Performance budgets**: ≤ 104 card buttons rebuilt per action (no per-frame DOM work); ≤ 600 particles; textures cached per (rank, thread, theme); 180 ms authored tweens; no network on the play path.
 - **Server**: Node 20 `node:http`, JSON store in `.server-data/store.json`, per-key rate limits (starts 30/min, commands 240/min, scores 20/min → HTTP 429), 64 KB body cap, refuses paths outside the repo root.
-- **E2E**: `tests/e2e.mjs` serves the repo with its own static server (`PORT` pins it, `BASE_URL` targets an external one), drives real buttons/cards in headless Chrome, reads `window.__eightwebs.session` only to choose which visible element to click next, and fails on any non-benign console error at 1280x800 and 390x844 (touch).
+- **E2E**: `tests/e2e.mjs` serves the repo with its own static server (`PORT` pins it, `BASE_URL` targets an external one), drives real buttons/cards in headless Chrome, reads `window.__eightwebs.session` only to choose which visible element to click next, and fails on any non-benign console error or warning at 1280x800 and 390x844 (touch).
 
 ## 14. Testing and acceptance criteria
 
-**`npm test` (31 tests, `tests/run-tests.mjs`)**: deck composition per thread count; opening layout; seed determinism; every illegality reason; `isMovableRun`/`topRunLength`; move immutability; flips; run collection; win with scoring components; deal rules and stock-empty rejection; command id idempotence; invalid actions recorded; move/time/no-moves/give-up terminals; round-over rejection; hint legality; serialize/deserialize; hash stability; 20-seed replay property; fuzzed malformed commands; session undo replayability; bad undo markers; golden terminal hashes; `compareResults` ordering; content counts (5/40/4/3/5); daily immutability; offline validators over all lessons, stages, challenges, 14 dailies and 9 practice seeds (lessons must win, nothing soft-locks).
+**`npm test` (35 tests, `tests/run-tests.mjs`)**: deck composition per thread count; opening layout; seed determinism; every illegality reason; `isMovableRun`/`topRunLength`; move immutability; flips; run collection; win with scoring components; deal rules and stock-empty rejection; command id idempotence; invalid actions recorded; move/time/no-moves/give-up terminals; round-over rejection; hint legality; serialize/deserialize; hash stability; 20-seed replay property; fuzzed malformed commands; session undo replayability; bad undo markers; golden terminal hashes; `compareResults` ordering; content counts (5/40/4/3/5); daily immutability; offline validators over all lessons, stages, challenges, 14 dailies and 9 practice seeds (lessons must win, nothing soft-locks); graphics model: `detectPreset` on sample GPU strings incl. the mobile cap, `resolve` with auto/preset/overrides/invalid values/scale clamp, preset choice clearing overrides, `describe`, and every Graphics string present in all nine locales.
 
-**`npm run test:e2e`** (both viewports): title renders → Learn lists 5 lessons → lesson 1 is won through two real card clicks and persists `lessonsDone` → Journey lists 40 stages with stage 2 locked → stage 1 countdown reaches `active` with a visible Deal button → `D` deals, hint-chosen moves are clicked on real cards/pads and the move counter matches → Hint dashes a card, Undo reverts a move → Escape pauses, autosave exists, Reduced motion and Theme settings apply and revert → Give up shows "Round abandoned" with a five-row breakdown → Title.
+**`npm run test:e2e`** (both viewports): title renders → Settings → Graphics shows "Auto (detected: Low)" under SwiftShader, Low/Ultra/High apply (`data-gfx-preset`), a Bloom override updates the summary and is saved, preset and override survive a reload, and Auto clears the override → Learn lists 5 lessons → lesson 1 is won through two real card clicks and persists `lessonsDone` → Journey lists 40 stages with stage 2 locked → stage 1 countdown reaches `active` with a visible Deal button → `D` deals, hint-chosen moves are clicked on real cards/pads and the move counter matches → Hint dashes a card, Undo reverts a move → Escape pauses, autosave exists, Reduced motion and Theme settings apply and revert → Give up shows "Round abandoned" with a five-row breakdown → Title.
 
 **Product QA bar as checkable statements**: first contact offers instructions (Help) and guided lessons; every mode, setting, hint, undo, deal, pause, resume, restart, give-up, resume-saved and results path is reachable by clicking; no console errors or warnings in the e2e run; no element clipped at 1280x800, 390x844 portrait, or ≤ 500 px-tall landscape (rails collapse, art hides, menus scroll); ranked results reach StarHermit boards when hosted.
 
@@ -277,17 +282,18 @@ Conventions follow https://wiki.starhermit.com/ (fragment `#game_token` launch t
 | `sfx/clock-warning.opus`, `achievement-unlock.opus`, `lesson-step.opus`, `pause-open.opus`, `ambience-study.opus` | New event clips + ambience loop (§9) | MOSS-SFX v2.0, 100 steps | generated in this pass, wired |
 | `sfx/manifest.txt` / `manifest.json` / `manifest.md` | Canonical clip table / generator input / generated summary | authored / tool | shipped |
 | `vendor/three.*.js` | Three.js r185 | MIT | shipped |
+| `vendor/addons/**` | Three.js r185 post-processing passes, shaders, `RoomEnvironment` | MIT | shipped |
 | 3D model / character animation | — | not required (procedural table, no humanoid) | n/a |
 
 ## 16. Known limitations
 
 - Journey stages carry a `theme` per web, but the table always uses the player's Theme setting; stage themes are not applied automatically.
 - The **Hold to drag** and camera-preset settings are stored but have no effect; the **Voice volume** bus has no content.
-- Localization is English only (§10).
+- Localization is English only apart from the Settings/Graphics panel strings (§10).
 - The client plays dailies locally and submits the envelope afterwards; the server's authoritative daily-session routes are unused, and only today's daily board is ever displayed (global boards are written but not shown).
 - Custom seeds in Practice always use Single Thread.
 - A lesson's final "Lesson complete when the web clears!" toast can briefly overlap the results modal's buttons (it expires after 3 s).
-- Under software WebGL (SwiftShader in the e2e run) the canvas renders only a dark partial region; the DOM table remains the interactive layer, so play is unaffected. On devices without WebGL a compat note appears and the DOM table is the game.
+- The DOM card layer is opaque and covers the 3D cards, so 3D card faces show only while a tween is in flight; the table, shadows, motes and sparks around them are what the 3D view adds. On devices without WebGL a compat note appears and the DOM table is the game.
 - Telemetry never sends because consent is never granted.
 - The keyboard focus cursor can land on a face-down index; the disabled button does not take focus until the cursor moves on.
 

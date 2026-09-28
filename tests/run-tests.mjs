@@ -15,6 +15,11 @@ import {
   dailyForDate, validateContent, validateAll, THEMES, ACHIEVEMENTS,
 } from '../js/content.js';
 import { Session } from '../js/session.js';
+import {
+  detectPreset, resolve as resolveGfx, presetTier, choosePreset, describe as describeGfx,
+  CATEGORIES, PRESETS,
+} from '../js/gfx.js';
+import { GFX_STRINGS, pickLocale } from '../js/gfx-i18n.js';
 
 let passed = 0;
 const tests = [];
@@ -406,6 +411,75 @@ test('practice + challenge content passes validators', () => {
     assert.ok(validateContent(practiceDef(d.id, 'fixed')).ok);
   }
   for (const c of CHALLENGES) assert.ok(validateContent(c.build()).ok, c.id);
+});
+
+// --- graphics quality model (js/gfx.js) ---------------------------------------
+test('gfx: detectPreset maps GPU strings to tiers; mobile caps at balanced', () => {
+  assert.equal(detectPreset('ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)'), 'low');
+  assert.equal(detectPreset('llvmpipe (LLVM 15.0.7, 256 bits)'), 'low');
+  assert.equal(detectPreset('ANGLE (NVIDIA, NVIDIA GeForce RTX 3080 Direct3D11 vs_5_0 ps_5_0, D3D11)'), 'high');
+  assert.equal(detectPreset('Apple M2 Pro'), 'high');
+  assert.equal(detectPreset('ANGLE (Intel, Intel(R) UHD Graphics 620 Direct3D11 vs_5_0 ps_5_0, D3D11)'), 'balanced');
+  assert.equal(detectPreset('Adreno (TM) 740'), 'balanced');
+  assert.equal(detectPreset(''), 'balanced');
+  assert.equal(detectPreset('NVIDIA GeForce RTX 4090', { mobile: true }), 'balanced');
+  assert.equal(detectPreset('SwiftShader', { mobile: true }), 'low');
+});
+
+test('gfx: resolve applies preset, auto, overrides and clamps render scale', () => {
+  const auto = resolveGfx({}, 'low');
+  assert.equal(auto.preset, 'low');
+  assert.equal(auto.auto, true);
+  assert.equal(auto.post, false, 'Low draws without the composer');
+  assert.equal(auto.adaptive, true);
+  assert.equal(auto.showFps, false);
+  const hi = resolveGfx({ preset: 'high' }, 'low');
+  assert.equal(hi.preset, 'high');
+  assert.equal(hi.auto, false);
+  for (const cat of Object.keys(CATEGORIES)) assert.equal(hi[cat], presetTier('high', cat));
+  assert.equal(hi.post, true);
+  const o = resolveGfx({ preset: 'high', bloom: 'off', shadows: 'high', ao: 'bogus' }, 'low');
+  assert.equal(o.bloom, 'off');
+  assert.equal(o.shadows, 'high');
+  assert.equal(o.ao, presetTier('high', 'ao'), 'invalid override falls back to the preset');
+  assert.equal(resolveGfx({ render_scale: 9 }, 'balanced').scale, 2);
+  assert.equal(resolveGfx({ render_scale: 0.1 }, 'balanced').scale, 0.5);
+  assert.equal(resolveGfx({ preset: 'ultra', render_scale: 2 }, 'low').scale, 2.5);
+  assert.equal(resolveGfx({ preset: 'nope' }, 'nope').preset, 'balanced');
+  assert.equal(resolveGfx({ adaptive: false, show_fps: true }, 'low').adaptive, false);
+  assert.equal(resolveGfx({ show_fps: true }, 'low').showFps, true);
+  assert.equal(resolveGfx({ preset: 'ultra' }, 'low').post, true, 'MSAA without context AA runs on the composer');
+  assert.equal(resolveGfx({ preset: 'ultra' }, 'low', { contextMsaa: true }).post, true);
+  assert.equal(resolveGfx({ preset: 'low', antialias: 'msaa' }, 'low', { contextMsaa: true }).post, false);
+});
+
+test('gfx: choosing a preset clears overrides but keeps scale and toggles', () => {
+  const saved = { preset: 'high', bloom: 'off', detail: 'plain', render_scale: 1.5, adaptive: false, show_fps: true };
+  const next = choosePreset(saved, 'low');
+  assert.deepEqual(next, { preset: 'low', render_scale: 1.5, adaptive: false, show_fps: true });
+  assert.equal(choosePreset({}, 'auto').preset, 'auto');
+  assert.equal(resolveGfx(next, 'high').bloom, presetTier('low', 'bloom'));
+  assert.ok(PRESETS.every((p) => Object.keys(CATEGORIES).every((c) => CATEGORIES[c].includes(presetTier(p, c)))));
+  assert.match(describeGfx(resolveGfx({ preset: 'high' }, 'low'), [800, 600]), /2048² shadows.*800×600 px/);
+  assert.match(describeGfx(resolveGfx({}, 'low')), /no shadows.*no AA/);
+});
+
+test('gfx i18n: all nine locales carry every Graphics string', () => {
+  const locales = ['en-US', 'en-GB', 'es-419', 'es-ES', 'de-DE', 'fr-FR', 'fr-CA', 'pt-BR', 'it-IT'];
+  const keys = (o, pre = '') => Object.entries(o).flatMap(([k, v]) => (v && typeof v === 'object' ? keys(v, pre + k + '.') : [pre + k])).sort();
+  const ref = keys(GFX_STRINGS['en-US']);
+  for (const l of locales) {
+    assert.ok(GFX_STRINGS[l], l);
+    assert.deepEqual(keys(GFX_STRINGS[l]), ref, l);
+    for (const cat of Object.keys(CATEGORIES)) assert.ok(GFX_STRINGS[l].cats[cat], `${l} ${cat}`);
+    for (const tiers of Object.values(CATEGORIES)) for (const t of tiers) assert.ok(GFX_STRINGS[l].tiers[t], `${l} ${t}`);
+  }
+  assert.equal(pickLocale('de'), 'de-DE');
+  assert.equal(pickLocale('es-MX'), 'es-419');
+  assert.equal(pickLocale('fr-CA'), 'fr-CA');
+  assert.equal(pickLocale('pt-PT'), 'pt-BR');
+  assert.equal(pickLocale('en-AU'), 'en-GB');
+  assert.equal(pickLocale('ja-JP'), 'en-US');
 });
 
 // ---------------------------------------------------------------------------

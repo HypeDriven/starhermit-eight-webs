@@ -30,6 +30,7 @@ async function boot() {
   renderer.container = document.getElementById('playfield');
   const glOk = renderer.init();
   renderer.setSuits(ui.suits);
+  ui.applySettings(); // re-resolve graphics now that the GPU is known
   if (!glOk) {
     const note = document.createElement('p');
     note.className = 'compat-note';

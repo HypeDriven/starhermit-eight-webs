@@ -183,6 +183,44 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible, select:focu
 .setting-row { display: flex; justify-content: space-between; align-items: center; gap: 1rem; min-height: 44px; }
 .setting-row input[type=range] { flex: 1; max-width: 160px; }
 .setting-row select { font: inherit; min-height: 36px; }
+.settings .gfx-settings { margin-top: .5rem; border-width: 1px 0 0; border-radius: 0; padding: .5rem 0 0; }
+.gfx-settings .setting-row { flex-wrap: wrap; gap: .2rem 1rem; }
+.gfx-settings .setting-row > span:first-child { flex: 1 1 8em; min-width: 0; }
+.gfx-settings select { max-width: 100%; min-width: 0; margin-left: auto; }
+.gfx-range { display: flex; align-items: center; gap: .4rem; flex: 1; justify-content: flex-end; white-space: nowrap; }
+.gfx-range input[type=range] { flex: 1; min-width: 70px; max-width: 160px; }
+.gfx-range-value { min-width: 3.2em; text-align: right; font-variant-numeric: tabular-nums; }
+.gfx-summary { overflow-wrap: anywhere; }
+.gfx-note { font-size: .85rem; color: var(--danger); }
+#fps-meter {
+  position: fixed; left: 8px; bottom: calc(8px + env(safe-area-inset-bottom)); z-index: 30;
+  pointer-events: none; font: 12px/1.2 ui-monospace, monospace; padding: 2px 6px; border-radius: 6px;
+  background: rgba(0,0,0,.55); color: #fff;
+}
+
+/* ---------- surface detail (Graphics → Surface detail: Detailed) ---------- */
+.gfx-detailed .card.face-up {
+  background-image:
+    radial-gradient(120% 80% at 30% 0%, rgba(255,255,255,.75), rgba(255,255,255,0) 60%),
+    linear-gradient(170deg, rgba(255,250,240,0) 55%, rgba(120,90,50,.07));
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.7), inset 0 -1px 0 rgba(0,0,0,.06), 0 1px 1px rgba(0,0,0,.18), 0 3px 8px rgba(0,0,0,.14);
+}
+.gfx-detailed .card.face-down, .gfx-detailed .stock-packet {
+  background-image:
+    repeating-conic-gradient(from 8deg at 50% 50%, rgba(255,240,215,.11) 0 1.2deg, transparent 1.2deg 30deg),
+    repeating-radial-gradient(circle at 50% 50%, transparent 0 7px, rgba(255,240,215,.08) 7px 8px),
+    linear-gradient(160deg, rgba(255,255,255,.08), rgba(0,0,0,.18));
+  box-shadow: inset 0 0 0 2px rgba(255,235,200,.1), 0 1px 2px rgba(0,0,0,.3);
+}
+.gfx-detailed .card.selected { box-shadow: 0 8px 18px rgba(0,0,0,.35), 0 0 0 1px rgba(255,255,255,.6) inset; }
+.gfx-detailed .foundation.filled {
+  background-image: radial-gradient(circle at 40% 30%, rgba(255,255,255,.35), rgba(255,255,255,0) 60%);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.35), 0 2px 8px rgba(0,0,0,.3);
+}
+.gfx-detailed .title-screen, .gfx-detailed .menu-screen {
+  background-image: radial-gradient(120% 90% at 50% 20%, rgba(255,255,255,.18), rgba(0,0,0,0) 55%, rgba(0,0,0,.12));
+}
+.gfx-detailed .title-art { box-shadow: 0 14px 40px rgba(0,0,0,.3), 0 0 0 1px rgba(255,255,255,.25) inset; }
 
 /* ---------- responsive ---------- */
 @media (max-width: 1023px) { /* compact: rails collapse into trays */
@@ -203,7 +241,7 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible, select:focu
 .reduced-motion * { transition: none !important; animation: none !important; }
 .reduced-motion .card.selected { transform: none; }
 </style>
-<script type="importmap">{"imports":{"three":"./vendor/three.module.js"}}</script>
+<script type="importmap">{"imports":{"three":"./vendor/three.module.js","three/addons/":"./vendor/addons/"}}</script>
 </head>
 <body>
 <div id="app"><div style="display:grid;place-items:center;height:100%;">Loading…</div></div>

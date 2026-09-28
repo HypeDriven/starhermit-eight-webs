@@ -11,6 +11,8 @@ import {
   practiceDef, dailyForDate, ACHIEVEMENTS,
 } from './content.js';
 import { computeLayout } from './render.js';
+import { CATEGORIES, PRESETS, presetTier, choosePreset, resolve as resolveGfx } from './gfx.js';
+import { gfxStrings, fmt } from './gfx-i18n.js';
 
 const SETTINGS_KEY = 'eightwebs:settings';
 const PROGRESS_KEY = 'eightwebs:progress';
@@ -18,7 +20,7 @@ const HISTORY_KEY = 'eightwebs:history';
 
 export const DEFAULT_SETTINGS = {
   theme: 'shadowbox',
-  tier: 'medium',
+  graphics: {}, // gfx.js saved shape: { preset: 'auto'|low|…, render_scale, adaptive, show_fps, <category> }
   muted: false, volMusic: 0.6, volEffects: 0.8, volAmbience: 0.4, volVoice: 0.8,
   reducedMotion: false, highContrast: false, largeText: false,
   leftHanded: false, holdToDrag: false, haptics: true, cvd: 'none', // none|deuter|protan|tritan
@@ -47,6 +49,8 @@ export class UI {
     this.renderer = renderer;
     this.audio = audio;
     this.settings = { ...DEFAULT_SETTINGS, ...(platform.loadLocal(SETTINGS_KEY) || {}) };
+    delete this.settings.tier; // replaced by the Graphics presets
+    if (!this.settings.graphics || typeof this.settings.graphics !== 'object') this.settings.graphics = {};
     this.progress = platform.loadLocal(PROGRESS_KEY) || {
       v: 1, journey: {}, lessonsDone: {}, achievements: {}, websCleared: 0,
       daysPlayed: [], bests: {}, mastery: {},
@@ -176,7 +180,9 @@ export class UI {
     this.shell.classList.toggle('left-handed', s.leftHanded);
     this.shell.classList.toggle('reduced-motion', s.reducedMotion);
     this.suits = this.themedSuits();
-    this.renderer?.setTier(s.tier);
+    this.renderer?.setGraphics?.(s.graphics);
+    const gq = this.renderer?.q || resolveGfx(s.graphics, 'balanced');
+    this.shell.classList.toggle('gfx-detailed', gq.detail === 'detailed');
     this.renderer?.setSuits(this.suits);
     if (this.renderer?.ok) { this.renderer.layoutEnv?.(); this.renderer.resize?.(); }
     this.audio.applyVolumes();
@@ -207,8 +213,8 @@ export class UI {
     })[screen]?.();
   }
 
-  modal(titleText, buildBody, { onClose } = {}) {
-    this.overlay.innerHTML = '';
+  modal(titleText, buildBody, { onClose, keep = false } = {}) {
+    if (!keep) this.overlay.innerHTML = ''; // keep: stack over the current screen
     const wrap = el('div', 'modal-wrap');
     const modal = el('section', 'modal');
     modal.setAttribute('role', 'dialog');
@@ -222,7 +228,7 @@ export class UI {
     this.overlay.append(wrap);
     const prevFocus = document.activeElement;
     const close = () => {
-      this.overlay.innerHTML = '';
+      if (keep) wrap.remove(); else this.overlay.innerHTML = '';
       prevFocus?.focus?.();           // focus restoration after every modal
       onClose?.();
     };
@@ -257,6 +263,7 @@ export class UI {
       this.button('Learn', () => this.show('lessons')),
       this.button('Scores', () => this.show('scores')),
       this.button('Help', () => this.show('help')),
+      this.button(gfxStrings().settings, () => this.showSettings()),
     );
     const resume = this.session.hasSnapshot()
       ? this.button('Resume saved round', () => this.resumeSaved(), 'btn btn-accent')
@@ -908,7 +915,6 @@ export class UI {
     slider('Ambience volume', 'volAmbience');
     slider('Voice volume', 'volVoice');
     toggle('Mute all', 'muted');
-    select('Graphics tier', 'tier', [['low', 'Low'], ['medium', 'Medium'], ['high', 'High']]);
     select('Theme', 'theme', THEMES.map((t) => [t.id, t.name]), () => this.syncBoard());
     select('Color-vision palette', 'cvd', [['none', 'Default'], ['deuter', 'Deuteranopia-safe'], ['protan', 'Protanopia-safe'], ['tritan', 'Tritanopia-safe']], () => this.syncBoard());
     toggle('Reduced motion', 'reducedMotion');
@@ -917,6 +923,117 @@ export class UI {
     toggle('Left-handed controls', 'leftHanded');
     toggle('Hold to drag (vs tap)', 'holdToDrag');
     toggle('Haptics', 'haptics');
+    wrap.append(this.graphicsSection());
+    return wrap;
+  }
+
+  // Settings from the title screen (in a round, the pause modal holds them).
+  showSettings() {
+    const T = gfxStrings();
+    this.modal(T.settings, (body, close) => {
+      body.append(this.settingsSection(), this.button(T.close, () => close(), 'btn btn-primary'));
+    }, { keep: true });
+  }
+
+  // Graphics: quality preset, render scale, per-effect overrides, adaptive
+  // resolution, frame-rate readout and a cost summary. Applies live.
+  graphicsSection() {
+    const T = gfxStrings();
+    const s = this.settings;
+    const wrap = el('fieldset', 'settings gfx-settings');
+    wrap.id = 'gfx-section';
+    wrap.append(el('legend', null, T.graphics));
+    const tierName = (t) => T.tiers[t] || T.presets[t] || t;
+    const info = () => this.renderer?.graphicsInfo?.() || {
+      ok: false, gpu: '', detected: 'balanced', resolved: resolveGfx(s.graphics, 'balanced'), summary: '', postFailed: false,
+    };
+    const row = (label, control, id) => {
+      const l = el('label', 'setting-row');
+      l.htmlFor = id;
+      l.append(el('span', null, label), control);
+      wrap.append(l);
+    };
+    const commit = () => {
+      this.applySettings();
+      refresh();
+      setTimeout(refresh, 200); // pixel size / post chain settle on the next frames
+    };
+    const opt = (sel, value, text) => { const o = el('option', null, text); o.value = value; sel.append(o); return o; };
+
+    const preset = el('select');
+    preset.id = 'gfx-preset'; preset.dataset.gfx = 'preset';
+    const autoOpt = opt(preset, 'auto', '');
+    for (const p of PRESETS) opt(preset, p, T.presets[p]);
+    preset.addEventListener('change', () => { s.graphics = choosePreset(s.graphics, preset.value); commit(); });
+    row(T.quality, preset, 'gfx-preset');
+
+    const scaleBox = el('span', 'gfx-range');
+    const scale = el('input');
+    scale.type = 'range'; scale.min = 50; scale.max = 200; scale.step = 5;
+    scale.id = 'gfx-scale'; scale.dataset.gfx = 'render_scale';
+    const scaleOut = el('output', 'gfx-range-value');
+    scaleOut.id = 'gfx-scale-value';
+    scaleBox.append(scale, scaleOut);
+    scale.addEventListener('input', () => {
+      s.graphics = { ...s.graphics, render_scale: Number(scale.value) / 100 };
+      scaleOut.textContent = `${scale.value}%`;
+      commit();
+    });
+    row(T.renderScale, scaleBox, 'gfx-scale');
+
+    const catSel = {};
+    for (const [cat, tiers] of Object.entries(CATEGORIES)) {
+      const sel = el('select');
+      sel.id = `gfx-${cat}`; sel.dataset.gfx = cat;
+      opt(sel, 'preset', '');
+      for (const t of tiers) opt(sel, t, tierName(t));
+      sel.addEventListener('change', () => {
+        const g = { ...s.graphics };
+        if (sel.value === 'preset') delete g[cat]; else g[cat] = sel.value;
+        s.graphics = g;
+        commit();
+      });
+      catSel[cat] = sel;
+      row(T.cats[cat] || cat, sel, sel.id);
+    }
+
+    const check = (label, key, id, def) => {
+      const i = el('input');
+      i.type = 'checkbox'; i.id = id; i.dataset.gfx = key;
+      i.checked = def ? s.graphics[key] !== false : !!s.graphics[key];
+      i.addEventListener('change', () => { s.graphics = { ...s.graphics, [key]: i.checked }; commit(); });
+      row(label, i, id);
+      return i;
+    };
+    const adaptive = check(T.adaptive, 'adaptive', 'gfx-adaptive', true);
+    const fps = check(T.showFps, 'show_fps', 'gfx-fps', false);
+
+    const summary = el('p', 'dim gfx-summary');
+    summary.id = 'gfx-summary';
+    summary.setAttribute('aria-live', 'polite');
+    const note = el('p', 'gfx-note');
+    note.id = 'gfx-note';
+    wrap.append(summary, note);
+
+    const refresh = () => {
+      const i = info();
+      const q = i.resolved;
+      autoOpt.textContent = fmt(T.auto, { tier: T.presets[i.detected] || i.detected });
+      preset.value = PRESETS.includes(s.graphics.preset) ? s.graphics.preset : 'auto';
+      const pct = Math.round((Number(s.graphics.render_scale) || 1) * 100);
+      scale.value = pct; scaleOut.textContent = `${pct}%`;
+      for (const [cat, sel] of Object.entries(catSel)) {
+        sel.options[0].textContent = fmt(T.fromPreset, { tier: tierName(presetTier(q.preset, cat)) });
+        sel.value = CATEGORIES[cat].includes(s.graphics[cat]) ? s.graphics[cat] : 'preset';
+      }
+      adaptive.checked = s.graphics.adaptive !== false;
+      fps.checked = !!s.graphics.show_fps;
+      summary.textContent = [i.gpu, i.summary].filter(Boolean).join(' · ');
+      const msg = !i.ok ? T.noWebgl : i.postFailed ? T.postFailed : '';
+      note.textContent = msg;
+      note.hidden = !msg;
+    };
+    refresh();
     return wrap;
   }
 

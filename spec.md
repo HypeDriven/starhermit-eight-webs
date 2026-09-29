@@ -304,3 +304,7 @@ Conventions follow https://wiki.starhermit.com/ (fragment `#game_token` launch t
 - Show global `global:<n>suit` boards and the player's own rank on the Scores screen.
 - Make **Hold to drag** switch between tap-to-lift and press-and-hold lifting.
 - Play dailies through `/api/v1/daily/*` when hosted so reconnects restore server-side state.
+
+## Browser interference
+
+`browser-guard.js` (loaded from `index.html`) suppresses browser UI that gets in the way of play: the right-click context menu, the iOS long-press callout, copy / cut / paste, and page text selection. Text fields (inputs, textareas, selects, contenteditable) keep normal selection, context menu and clipboard behaviour.

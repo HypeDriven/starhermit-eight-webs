@@ -135,6 +135,8 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible, select:focu
 .tagline { opacity: .7; max-width: 70ch; }
 .title-row { display: flex; flex-wrap: wrap; gap: .5rem; justify-content: center; }
 .title-progress { opacity: .6; font-size: .9rem; }
+.title-platform { display: flex; flex-wrap: wrap; gap: .5rem; justify-content: center; align-items: center; }
+.title-platform .title-progress { flex-basis: 100%; text-align: center; margin: 0; overflow-wrap: anywhere; }
 .menu-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: .7rem; width: min(720px, 92vw); }
 .mode-card { display: flex; flex-direction: column; gap: .25rem; padding: 1rem; text-align: left; }
 .mode-card span { font-size: .85rem; opacity: .7; }
@@ -247,6 +249,7 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible, select:focu
 <body>
 <div id="app"><div style="display:grid;place-items:center;height:100%;">Loading…</div></div>
 <noscript><p style="text-align:center;padding:2rem;">Eight Webs requires JavaScript to run.</p></noscript>
+<script src="./starhermit-sdk.js"></script>
 <script type="module" src="./js/main.js"></script>
 </body>
 </html>

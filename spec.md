@@ -9,7 +9,7 @@ Present-tense description of the shipped game. Every statement below is true of 
 | | |
 |---|---|
 | Genre | Single-player card sequencing puzzle (Spider-family patience with authored progression) |
-| Players | 1; asynchronous competition through validated daily/global leaderboards when hosted |
+| Players | 1; local scores, history and a per-device daily board |
 | Session length | Learn lesson 1–2 min; Journey/Practice/Daily round 10–40 min; Challenges 10–25 min |
 | Platforms | Desktop and mobile browsers (Chrome-class, ES modules, WebAudio, optional WebGL) |
 | Rendering | Three.js orthographic "shadow-box" scene under a fully interactive DOM card layer that uses the same layout model; the DOM layer alone is a complete game when WebGL is unavailable |
@@ -30,8 +30,8 @@ Present-tense description of the shipped game. Every statement below is true of 
 | `js/gfx-i18n.js` | Settings/Graphics panel strings in the nine supported locales, `pickLocale` |
 | `js/render-helpers.js` | Re-exports `createStream`/`rankLabel` so render never imports rules-only internals |
 | `js/audio.js` | WebAudio buses, authored Opus clips with synthesized fallbacks, ambience loop, adaptive music, captions |
-| `js/platform.js` | localStorage persistence, hosted REST adapter (`/api/v1/*`) gated by a time probe, score/achievement submission, telemetry stub |
-| `server.js` | Dependency-free Node server: static files, `/api/v1/time`, daily descriptors, replay-validated score submission, leaderboards, achievements, plus a legacy `/api/session` and `/api/game/*` state API |
+| `js/platform.js` | localStorage persistence, StarHermit SDK layer, server clock (`GET /api/v1/time`, signed in only) |
+| `server.js` | Dependency-free Node server: static files and `/api/v1/time`; its daily/score/leaderboard/achievement routes and legacy `/api/session`, `/api/game/*` API are no longer called by the client |
 | `starhermit.txt` | Platform manifest (`name`, `launch`, `owner`, `server`, `cover`) |
 | `starhermit_zh.txt` | Chinese-language server/network chapter that the legacy `/api/session` routes follow; the browser client does not call those routes |
 | `tests/run-tests.mjs` | 35 offline rules/content/session/graphics-model tests (`npm test`) |
@@ -102,7 +102,7 @@ Worked examples:
 ### Terminal states
 `status ∈ {active, won, lost, aborted}` with `terminalReason ∈ {all-runs, move-limit, time-limit, no-moves, gave-up}`. Commands after the end return `round-over`. The UI headline is "🕸 All webs cleared!", "Round abandoned", or "The weave holds…".
 
-### Tie-break (`compareResults`, used by the server leaderboard)
+### Tie-break (`compareResults`, used by `server.js`'s legacy leaderboard)
 won > lost > aborted; then more webs; then higher total; then fewer invalid actions; then lower `elapsedMs`; then session id.
 
 ### Undo and hints
@@ -218,7 +218,7 @@ Danger is `#c0392b` (`#eb5757` on Midnight). Threads: Crimson `#c0392b` ●, Amb
 
 ## 10. Localization
 
-**Shipped:** English only (`<html lang="en">`; all strings are inline literals in `js/ui.js`, `js/content.js` and `js/audio.js` captions). The only localized UI is the Settings button, Settings title/Close and the Graphics panel (`js/gfx-i18n.js`), shipped in all nine locales below and chosen from `navigator.language` (en-US fallback); there is no language setting. The required locale set — en-US, en-GB, es-419, es-ES, de-DE, fr-FR, fr-CA, pt-BR, it-IT — is design intent (see §17). Layout already tolerates ~35 % string growth: buttons are content-sized with 44 px minimums, the title row wraps, rails and menus scroll, and the top title truncates with an ellipsis rather than overflowing.
+**Shipped:** English only (`<html lang="en">`; all strings are inline literals in `js/ui.js`, `js/content.js` and `js/audio.js` captions). The only localized UI is the StarHermit strings (title status line, sign-in, invite, toasts; table in `js/ui.js`), the Settings button, Settings title/Close and the Graphics panel (`js/gfx-i18n.js`), shipped in all nine locales below and chosen from `navigator.language` (en-US fallback); there is no language setting. The required locale set — en-US, en-GB, es-419, es-ES, de-DE, fr-FR, fr-CA, pt-BR, it-IT — is design intent (see §17). Layout already tolerates ~35 % string growth: buttons are content-sized with 44 px minimums, the title row wraps, rails and menus scroll, and the top title truncates with an ellipsis rather than overflowing.
 
 ## 11. Accessibility
 
@@ -232,20 +232,24 @@ Danger is `#c0392b` (`#eb5757` on Midnight). Threads: Crimson `#c0392b` ●, Amb
 
 ## 12. StarHermit integration
 
-Conventions follow https://wiki.starhermit.com/ (fragment `#game_token` launch token, Bearer auth, `/api/v1/*`).
+Conventions follow https://wiki.starhermit.com/. All platform I/O goes through `starhermit-sdk.js` (an unmodified copy of `tools/starhermit-sdk.js`, loaded as a classic script before the module graph); `js/platform.js` (`Platform`) is a thin adapter over `window.StarHermit` plus local persistence and the own-server routes.
 
 | Feature | Status | Where |
 |---|---|---|
-| Manifest | Used: `name`, `launch`, `owner`, `server`, `cover` | `starhermit.txt` |
-| Identity | `#game_token=<jwt>` read from the URL fragment (optional `&session_id=`, stripped after the read; `?launch_token=` kept for local dev), decoded for `sub` + `game_scope` (never hard-coded), sent as a Bearer header on every call, re-minted every 45 min via `POST /api/v1/games/{slug}/launch-token` (60 s retry), never persisted. The display name is the profile nickname from `GET /api/v1/users/{sub}/profile` (never usernames, never `/api/v1/me`; `Player <id8>` fallback), shown above the daily board with cloud-sync status; submissions and achievement reports carry the account id (the anonymous `eightwebs:player` id remains the offline fallback) | `Platform` |
-| Hosted detection | `GET /api/v1/time` must succeed for the own-server backend (`hosted` gates the score/leaderboard/achievement routes, graceful local fallback otherwise); a launch token independently enables platform identity + cloud save (`tokenHosted`) | `Platform.syncServerTime` |
-| Server clock | Round-trip-adjusted offset stamps replay envelopes | `serverOffsetMs` |
-| Cloud save | When a launch token is present, the progress document mirrors to one zip+base64 slot at `GET/PUT /api/v1/me/cloud-saves/{slug}` — remote wins on boot, saves debounce 2 s and flush on `pagehide`/hidden with keepalive; localStorage stays the offline cache | `Platform.saveLocal`, `Platform.loadCloudSave` |
-| Leaderboards | Ranked content (Daily, Mastery stages, Challenges) POSTs `{board, envelope, identity:{playerId, name}}` to `/api/v1/score` (Bearer when hosted); boards are `daily:<UTC day>` or `global:<n>suit`; the server replays the envelope, checks the claimed total/status, rejects sub-150 ms-per-move play, keeps the top 100 (with player names) and returns rank. Scores screen shows today's daily board (top 20) with nicknames and your own row marked | `submitScore`, `server.js` |
-| Achievements | Local first (part of the cloud-mirrored progress doc); new keys POSTed to `/api/v1/achievements` keyed by the account id (server validates keys, idempotent) | `reportAchievements` |
-| Sessions / presence | Not used by the client. The server also exposes `/api/v1/daily/start|command|session/:id` (authoritative daily sessions) and the legacy `/api/session`, `/api/settings`, `/api/game/*` routes from `starhermit_zh.txt`; the browser plays dailies locally and submits the envelope instead | `server.js` |
-| Telemetry | Stubbed: `Platform.telemetry` only beacons with explicit consent, and nothing sets `consent = true` | `platform.js` |
-| Multiplayer | None; competition is asynchronous through the boards | — |
+| Manifest | Used: `name`, `launch`, `owner`, `server`, `cover`, plus one `control.<action>=<Code>[+<Code>] \| <Label>` line per keyboard action (`left`/`right`/`up`/`down` arrows, `confirm`=Enter+Space, `deal`=KeyD, `hint`=KeyH, `undo`=KeyU, `pause`=Escape) | `starhermit.txt` |
+| Launch token / sign-in | `StarHermit.init()` (in the `Platform` constructor, before anything touches the URL) reads `#game_token=` (library; optional `&session_id=`) or `#access_token=` (sign-in return), strips it, takes the slug from `game_scope`, renews the token before expiry and never persists it; if renewal is refused the title loses the account line and shows the sign-in button again, and play continues locally. On `*.starhermit.com` without a token the title shows "Sign in with StarHermit" (`StarHermit.signIn()`); hidden when signed in or running locally | `Platform`, `UI.refreshPlatformLine` |
+| Identity | The display name is the nickname from `StarHermit.profile()` (`Player <id>` fallback), shown on the title as "Playing as <nickname> · sync status" | `Platform` |
+| Settings KV | Every settings save (theme, graphics, volumes, mute, reduced motion, high contrast, larger text, left-handed, hold-to-drag, haptics, colour-vision palette, camera preset) is written with `patchSettings` (400 ms debounce) once the boot read of `getSettings()` has been applied (platform wins) | `UI.saveSettings`, `UI.syncFromPlatform` |
+| Invite link | Signed in: the title shows "Invite a friend", which copies `StarHermit.inviteLink()` and confirms with a toast (shows the link if copying is blocked) | `UI.inviteFriend` |
+| Controls | Keys are matched by `event.code` through `StarHermit.loadBindings(defaults)`; the Help "Controls" card shows the effective keys. No in-game rebinding UI | `UI.setBindings` |
+| Own server | Signed in only: `GET /api/v1/time` (Bearer) on boot and on sign-in. Standalone (no launch token) the game makes no own-server requests at all and uses the local clock. A launch token enables platform identity, cloud save, settings and controls (`tokenHosted`) | `Platform.syncServerTime` |
+| Server clock | Round-trip-adjusted offset (0 standalone) stamps replay envelopes and picks the Scores screen's UTC day | `serverOffsetMs` |
+| Cloud save | Signed in, the progress document is mirrored with `StarHermit.saveJSON` (2 s debounce) to `/api/v1/me/cloud-saves/game:<slug>`, flushed with keepalive on `pagehide`/hidden; remote wins on boot (`loadJSON`, version-checked); localStorage stays the offline cache | `Platform.saveLocal`, `Platform.loadCloudSave` |
+| Leaderboards | No own-server boards. The Scores screen lists the last 10 results and a "Daily board — <day> (this device)" of today's daily wins from local history | `UI.screenScores` |
+| Achievements | Local only (part of the cloud-mirrored progress doc) | `UI.onRoundEnd` |
+| Sessions / presence | Not used by the client. The server also exposes `/api/v1/daily/start|command|session/:id` (authoritative daily sessions) and the legacy `/api/session`, `/api/settings`, `/api/game/*` routes from `starhermit_zh.txt`; the browser plays dailies locally and never calls them | `server.js` |
+| Telemetry | None |
+| Multiplayer | None. Platform sessions, matchmaking, session invites, chat, replays, realtime and voice are not used (`server.js` is not a platform session script), and platform achievements/leaderboards are not used (the game's server reports none to the platform). New platform strings (status line, sign-in, invite, toasts) are localized in the nine locales | — |
 
 ## 13. Technical architecture
 
@@ -261,9 +265,9 @@ Conventions follow https://wiki.starhermit.com/ (fragment `#game_token` launch t
 
 ## 14. Testing and acceptance criteria
 
-**`npm test` (35 tests, `tests/run-tests.mjs`)**: deck composition per thread count; opening layout; seed determinism; every illegality reason; `isMovableRun`/`topRunLength`; move immutability; flips; run collection; win with scoring components; deal rules and stock-empty rejection; command id idempotence; invalid actions recorded; move/time/no-moves/give-up terminals; round-over rejection; hint legality; serialize/deserialize; hash stability; 20-seed replay property; fuzzed malformed commands; session undo replayability; bad undo markers; golden terminal hashes; `compareResults` ordering; content counts (5/40/4/3/5); daily immutability; offline validators over all lessons, stages, challenges, 14 dailies and 9 practice seeds (lessons must win, nothing soft-locks); graphics model: `detectPreset` on sample GPU strings incl. the mobile cap, `resolve` with auto/preset/overrides/invalid values/scale clamp, preset choice clearing overrides, `describe`, and every Graphics string present in all nine locales.
+**`npm test`** runs `tests/platform.test.mjs` (SDK + adapter against a stubbed `window`/`fetch`/launch hash: token read and fragment strip, profile nickname, `game:<slug>` cloud-save round-trip, debounced settings patch, binding overrides, invite link, Bearer on the own-server clock, no StarHermit call standalone) after **35 tests in `tests/run-tests.mjs`**: deck composition per thread count; opening layout; seed determinism; every illegality reason; `isMovableRun`/`topRunLength`; move immutability; flips; run collection; win with scoring components; deal rules and stock-empty rejection; command id idempotence; invalid actions recorded; move/time/no-moves/give-up terminals; round-over rejection; hint legality; serialize/deserialize; hash stability; 20-seed replay property; fuzzed malformed commands; session undo replayability; bad undo markers; golden terminal hashes; `compareResults` ordering; content counts (5/40/4/3/5); daily immutability; offline validators over all lessons, stages, challenges, 14 dailies and 9 practice seeds (lessons must win, nothing soft-locks); graphics model: `detectPreset` on sample GPU strings incl. the mobile cap, `resolve` with auto/preset/overrides/invalid values/scale clamp, preset choice clearing overrides, `describe`, and every Graphics string present in all nine locales.
 
-**`npm run test:e2e`** (both viewports): title renders → Settings → Graphics shows "Auto (detected: Low)" under SwiftShader, Low/Ultra/High apply (`data-gfx-preset`), a Bloom override updates the summary and is saved, preset and override survive a reload, and Auto clears the override → Learn lists 5 lessons → lesson 1 is won through two real card clicks and persists `lessonsDone` → Journey lists 40 stages with stage 2 locked → stage 1 countdown reaches `active` with a visible Deal button → `D` deals, hint-chosen moves are clicked on real cards/pads and the move counter matches → Hint dashes a card, Undo reverts a move → Escape pauses, autosave exists, Reduced motion and Theme settings apply and revert → Give up shows "Round abandoned" with a five-row breakdown → Title.
+**`npm run test:e2e`** (both viewports): title renders → Settings → Graphics shows "Auto (detected: Low)" under SwiftShader, Low/Ultra/High apply (`data-gfx-preset`), a Bloom override updates the summary and is saved, preset and override survive a reload, and Auto clears the override → Learn lists 5 lessons → lesson 1 is won through two real card clicks and persists `lessonsDone` → Journey lists 40 stages with stage 2 locked → stage 1 countdown reaches `active` with a visible Deal button → `D` deals, hint-chosen moves are clicked on real cards/pads and the move counter matches → Hint dashes a card, Undo reverts a move → Escape pauses, autosave exists, Reduced motion and Theme settings apply and revert → Give up shows "Round abandoned" with a five-row breakdown → Title. Standalone passes fail on any same-origin `/api` or `/ws` request; a signed-in pass per viewport (platform API stubbed) checks the nickname on the title, the `game:eight-webs` save load, the stripped fragment, a platform setting (high contrast), the Invite a friend toast on-screen and a platform key binding in Help.
 
 **Product QA bar as checkable statements**: first contact offers instructions (Help) and guided lessons; every mode, setting, hint, undo, deal, pause, resume, restart, give-up, resume-saved and results path is reachable by clicking; no console errors or warnings in the e2e run; no element clipped at 1280x800, 390x844 portrait, or ≤ 500 px-tall landscape (rails collapse, art hides, menus scroll); ranked results reach StarHermit boards when hosted.
 
@@ -294,16 +298,14 @@ Conventions follow https://wiki.starhermit.com/ (fragment `#game_token` launch t
 - Custom seeds in Practice always use Single Thread.
 - A lesson's final "Lesson complete when the web clears!" toast can briefly overlap the results modal's buttons (it expires after 3 s).
 - The DOM card layer is opaque and covers the 3D cards, so 3D card faces show only while a tween is in flight; the table, shadows, motes and sparks around them are what the 3D view adds. On devices without WebGL a compat note appears and the DOM table is the game.
-- Telemetry never sends because consent is never granted.
 - The keyboard focus cursor can land on a face-down index; the disabled button does not take focus until the cursor moves on.
 
 ## 17. Design intent not yet implemented
 
 - Ship the nine required locales with a string table and a language setting (auto-detect from `navigator.language`, en-US fallback).
 - Apply each Journey web's theme on stage start (with the player's setting as an override).
-- Show global `global:<n>suit` boards and the player's own rank on the Scores screen.
+- Shared daily/global boards via the platform leaderboard API (the own-server boards are not used).
 - Make **Hold to drag** switch between tap-to-lift and press-and-hold lifting.
-- Play dailies through `/api/v1/daily/*` when hosted so reconnects restore server-side state.
 
 ## Browser interference
 

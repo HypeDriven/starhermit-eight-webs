@@ -54,7 +54,6 @@ async function boot() {
   window.addEventListener('keydown', kickAudio, { once: true });
 
   ui.show('title');
-  platform.telemetry('start');
 
   // Debug handle for smoke tests.
   window.__eightwebs = { session, ui, renderer, platform };

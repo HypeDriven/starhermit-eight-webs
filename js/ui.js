@@ -12,7 +12,7 @@ import {
 } from './content.js';
 import { computeLayout } from './render.js';
 import { CATEGORIES, PRESETS, presetTier, choosePreset, resolve as resolveGfx } from './gfx.js';
-import { gfxStrings, fmt } from './gfx-i18n.js';
+import { gfxStrings, fmt, pickLocale } from './gfx-i18n.js';
 
 const SETTINGS_KEY = 'eightwebs:settings';
 const PROGRESS_KEY = 'eightwebs:progress';
@@ -25,6 +25,27 @@ export const DEFAULT_SETTINGS = {
   reducedMotion: false, highContrast: false, largeText: false,
   leftHanded: false, holdToDrag: false, haptics: true, cvd: 'none', // none|deuter|protan|tritan
   cameraPreset: 'table',
+};
+
+// StarHermit strings (status line, sign-in, invite, toasts) in nine locales.
+const PT = {
+  'en-US': { offline: 'Offline — progress is stored on this device.', playing: 'Playing as {name}', synced: 'progress synced', saving: 'saving…', nosync: 'cloud sync unavailable', signIn: 'Sign in with StarHermit', invite: 'Invite a friend', copied: 'Invite link copied to the clipboard.', copyFail: 'Could not copy — invite link: {link}' },
+  'en-GB': { offline: 'Offline — progress is stored on this device.', playing: 'Playing as {name}', synced: 'progress synced', saving: 'saving…', nosync: 'cloud sync unavailable', signIn: 'Sign in with StarHermit', invite: 'Invite a friend', copied: 'Invite link copied to the clipboard.', copyFail: 'Could not copy — invite link: {link}' },
+  'es-419': { offline: 'Sin conexión: el progreso se guarda en este dispositivo.', playing: 'Jugando como {name}', synced: 'progreso sincronizado', saving: 'guardando…', nosync: 'sincronización en la nube no disponible', signIn: 'Iniciar sesión con StarHermit', invite: 'Invitar a un amigo', copied: 'Enlace de invitación copiado al portapapeles.', copyFail: 'No se pudo copiar. Enlace de invitación: {link}' },
+  'es-ES': { offline: 'Sin conexión: el progreso se guarda en este dispositivo.', playing: 'Jugando como {name}', synced: 'progreso sincronizado', saving: 'guardando…', nosync: 'sincronización en la nube no disponible', signIn: 'Iniciar sesión con StarHermit', invite: 'Invitar a un amigo', copied: 'Enlace de invitación copiado al portapapeles.', copyFail: 'No se ha podido copiar. Enlace de invitación: {link}' },
+  'de-DE': { offline: 'Offline – der Fortschritt wird auf diesem Gerät gespeichert.', playing: 'Du spielst als {name}', synced: 'Fortschritt synchronisiert', saving: 'wird gespeichert…', nosync: 'Cloud-Synchronisierung nicht verfügbar', signIn: 'Mit StarHermit anmelden', invite: 'Freund einladen', copied: 'Einladungslink in die Zwischenablage kopiert.', copyFail: 'Kopieren fehlgeschlagen – Einladungslink: {link}' },
+  'fr-FR': { offline: 'Hors ligne : la progression est enregistrée sur cet appareil.', playing: 'Vous jouez en tant que {name}', synced: 'progression synchronisée', saving: 'enregistrement…', nosync: 'synchronisation cloud indisponible', signIn: 'Se connecter avec StarHermit', invite: 'Inviter un ami', copied: 'Lien d’invitation copié dans le presse-papiers.', copyFail: 'Copie impossible — lien d’invitation : {link}' },
+  'fr-CA': { offline: 'Hors ligne : la progression est enregistrée sur cet appareil.', playing: 'Vous jouez en tant que {name}', synced: 'progression synchronisée', saving: 'enregistrement…', nosync: 'synchronisation infonuagique non disponible', signIn: 'Se connecter avec StarHermit', invite: 'Inviter un ami', copied: 'Lien d’invitation copié dans le presse-papiers.', copyFail: 'Copie impossible — lien d’invitation : {link}' },
+  'pt-BR': { offline: 'Offline — o progresso fica salvo neste dispositivo.', playing: 'Jogando como {name}', synced: 'progresso sincronizado', saving: 'salvando…', nosync: 'sincronização na nuvem indisponível', signIn: 'Entrar com StarHermit', invite: 'Convidar um amigo', copied: 'Link de convite copiado para a área de transferência.', copyFail: 'Não foi possível copiar — link de convite: {link}' },
+  'it-IT': { offline: 'Offline: i progressi sono salvati su questo dispositivo.', playing: 'Giochi come {name}', synced: 'progressi sincronizzati', saving: 'salvataggio…', nosync: 'sincronizzazione cloud non disponibile', signIn: 'Accedi con StarHermit', invite: 'Invita un amico', copied: 'Link di invito copiato negli appunti.', copyFail: 'Impossibile copiare. Link di invito: {link}' }
+};
+const P_STR = PT[pickLocale(typeof navigator !== 'undefined' ? navigator.language : 'en-US')] || PT['en-US'];
+
+// Keyboard actions as KeyboardEvent.code values; platform overrides apply via
+// StarHermit controls (control.* lines in starhermit.txt).
+export const DEFAULT_KEYS = {
+  left: ['ArrowLeft'], right: ['ArrowRight'], up: ['ArrowUp'], down: ['ArrowDown'],
+  confirm: ['Enter', 'Space'], deal: ['KeyD'], hint: ['KeyH'], undo: ['KeyU'], pause: ['Escape'],
 };
 
 const CVD_SUIT_COLORS = {
@@ -63,34 +84,78 @@ export class UI {
     this.suits = this.themedSuits();
     this.build();
     this.applySettings();
-    // Hosted: the remote progress document wins over the local cache.
-    if (this.platform.tokenHosted) {
-      this.platform.onSync?.(() => this.renderStatus?.());
-      this.platform.fetchProfile?.().then(() => this.renderStatus?.()).catch(() => {});
-      this.platform.loadCloudSave?.().then((remoteJson) => {
-        if (!remoteJson) return this.renderStatus?.();
-        try {
-          const remote = JSON.parse(remoteJson);
-          if (remote && remote.v === 1) {
-            this.progress = remote;
-            this.saveProgress(); // local cache mirrors the remote doc
-            this.applySettings();
-          }
-        } catch { /* corrupt remote: keep local */ }
-        this.renderStatus?.();
-      }).catch(() => {});
-    }
+    this.setBindings(DEFAULT_KEYS);
+    // Signed in: the remote progress document, platform settings and key
+    // bindings win over the local ones.
+    this.platform.onSync?.(() => this.refreshPlatformLine());
+    this.platform.onAuth?.(() => { if (this.screen === 'title') this.show('title'); this.syncFromPlatform(); });
+    this.syncFromPlatform();
   }
 
-  // Account + cloud-sync status shown above the daily board.
+  syncFromPlatform() {
+    const P = this.platform;
+    if (!P.tokenHosted) return;
+    P.fetchProfile().then(() => this.refreshPlatformLine()).catch(() => {});
+    this._platformSettingsReady = false;
+    P.loadCloudSave().then((remoteJson) => {
+      if (!remoteJson) return;
+      try {
+        const remote = JSON.parse(remoteJson);
+        if (remote && remote.v === 1) {
+          this.progress = remote;
+          this.saveProgress(); // local cache mirrors the remote doc
+          this.applySettings();
+        }
+      } catch { /* corrupt remote: keep local */ }
+    }).catch(() => {}).then(() => P.getSettings()).then((remote) => {
+      this._platformSettingsReady = true;
+      let changed = false;
+      for (const k of Object.keys(DEFAULT_SETTINGS)) {
+        const v = remote?.[k];
+        if (v == null || typeof v !== typeof DEFAULT_SETTINGS[k]) continue;
+        this.settings[k] = v; changed = true;
+      }
+      if (changed) this.applySettings();
+      this.refreshPlatformLine();
+    }, () => { this._platformSettingsReady = true; });
+    P.loadBindings(DEFAULT_KEYS).then((b) => this.setBindings(b)).catch(() => {});
+  }
+
+  setBindings(b) {
+    this.bindings = b;
+    this.keyAction = {};
+    for (const [a, codes] of Object.entries(b)) for (const c of codes || []) this.keyAction[c] = a;
+  }
+  keyLabel(action) {
+    return (this.bindings[action] || []).map((c) => String(c).replace(/^Key|^Digit/, '').replace(/^Arrow(.+)$/, '$1').replace(/^Escape$/, 'Esc')).join('/');
+  }
+
+  // Title: "Playing as …" + sign-in / Invite a friend buttons.
+  refreshPlatformLine() {
+    const line = this.root.querySelector('.title-platform');
+    if (!line) return;
+    line.replaceChildren();
+    const P = this.platform;
+    const status = this.renderStatus();
+    if (status) line.append(el('p', 'title-progress', status));
+    if (P.canSignIn()) line.append(this.button(P_STR.signIn, () => P.signIn(), 'btn btn-signin'));
+    if (P.tokenHosted && P.inviteLink()) line.append(this.button(P_STR.invite, () => this.inviteFriend(), 'btn btn-invite'));
+  }
+
+  inviteFriend() {
+    const link = this.platform.inviteLink();
+    if (!link) return;
+    const fail = () => this.toast(P_STR.copyFail.replace('{link}', link));
+    try { navigator.clipboard.writeText(link).then(() => this.toast(P_STR.copied), fail); } catch { fail(); }
+  }
+
+  // Account + cloud-sync status shown on the title.
   renderStatus() {
     const P = this.platform;
     if (!P?.tokenHosted) return null;
     const name = P.profile ? P.profile.name : '…';
-    return 'Playing as ' + name + ' · ' +
-      (P.sync === 'synced' ? 'progress synced'
-        : P.sync === 'saving' ? 'saving…'
-        : 'cloud sync pending');
+    return P_STR.playing.replace('{name}', name) + ' · ' +
+      (P.sync === 'synced' ? P_STR.synced : P.sync === 'saving' ? P_STR.saving : P_STR.nosync);
   }
 
   themedSuits() {
@@ -98,7 +163,11 @@ export class UI {
     return SUITS.map((s, i) => ({ ...s, color: cvd ? cvd[i] : s.color }));
   }
 
-  saveSettings() { this.platform.saveLocal(SETTINGS_KEY, this.settings); }
+  saveSettings() {
+    this.platform.saveLocal(SETTINGS_KEY, this.settings);
+    // Settings KV mirror, once the boot read of the platform values is applied.
+    if (this.platform.tokenHosted && this._platformSettingsReady) this.platform.patchSettings({ ...this.settings });
+  }
   saveProgress() { this.platform.saveLocal(PROGRESS_KEY, this.progress); }
 
   // -------------------------------------------------------------------------
@@ -272,8 +341,9 @@ export class UI {
       `Journey ${Object.keys(this.progress.journey).length}/${JOURNEY.length} · Webs cleared ${this.progress.websCleared}`);
     wrap.append(h1, art, tag, play, row);
     if (resume) wrap.append(resume);
-    wrap.append(progress);
+    wrap.append(progress, el('div', 'title-platform'));
     this.overlay.append(wrap);
+    this.refreshPlatformLine();
     play.focus();
   }
 
@@ -394,25 +464,15 @@ export class UI {
     const lb = el('div', 'menu-list');
     wrap.append(list, lb, this.button('← Back', () => this.show('modes')));
     this.overlay.append(wrap);
-    // Today's daily board is the primary competitive board submissions post to.
-    const day = new Date().toISOString().slice(0, 10);
-    this.platform.fetchLeaderboard?.(`daily:${day}`).then((r) => {
-      const entries = r?.entries || [];
-      if (!this.platform.hosted) {
-        lb.append(el('p', 'dim', 'Hosted leaderboards appear here when played through StarHermit.'));
-        return;
-      }
-      const status = this.renderStatus?.();
-      if (status) lb.append(el('p', 'dim', status));
-      lb.append(el('h2', null, `Daily board — ${day}`));
-      if (!entries.length) { lb.append(el('p', 'dim', 'No validated scores yet today.')); return; }
-      for (const e of entries) {
-        const t = `${Math.floor(e.elapsedMs / 60000)}:${String(Math.floor(e.elapsedMs / 1000) % 60).padStart(2, '0')}`;
-        const who = e.name ? (e.playerId && e.playerId === this.platform.identityId ? 'You (' + e.name + ')' : e.name) : 'prospector';
-        lb.append(el('div', 'score-row',
-          `#${e.rank} — ${who} — score ${e.score} · webs ${e.foundations} · ${e.moves} moves · ${e.invalid} invalid · ${t}${e.validated ? ' · validated' : ''}`));
-      }
-    }).catch(() => {});
+    // Today's daily board: this device's daily rounds (no own-server board).
+    const day = new Date(this.platform.serverNow()).toISOString().slice(0, 10);
+    const today = this.history.filter((r) => r.contentId === `daily-${day}` && r.status === 'won')
+      .sort((a, b) => b.score.total - a.score.total);
+    lb.append(el('h2', null, `Daily board — ${day} (this device)`));
+    if (!today.length) lb.append(el('p', 'dim', 'No daily wins yet today.'));
+    today.slice(0, 10).forEach((r, i) => {
+      lb.append(el('div', 'score-row', `#${i + 1} — score ${r.score.total} · webs ${r.foundations} · ${r.moves} moves`));
+    });
   }
 
   screenHelp() {
@@ -425,7 +485,7 @@ export class UI {
       ['Clear webs', 'A complete King-to-Ace run of one thread lifts off the table. Clear eight webs to win.'],
       ['The stock', 'Deal adds one face-up card to every column — only when no column is empty. Five deals per round.'],
       ['Empty columns', 'Any run may rest in an empty column. They are your work space.'],
-      ['Controls', 'Tap or click a card to lift its run, then tap a destination. Keyboard: arrows move focus, Enter lifts/drops, D deals, H hints, U undoes, Esc pauses.'],
+      ['Controls', `Tap or click a card to lift its run, then tap a destination. Keyboard: ${['left', 'right', 'up', 'down'].map((a) => this.keyLabel(a)).join('/')} move focus, ${this.keyLabel('confirm')} lifts/drops, ${this.keyLabel('deal')} deals, ${this.keyLabel('hint')} hints, ${this.keyLabel('undo')} undoes, ${this.keyLabel('pause')} pauses.`],
     ];
     for (const [t, d] of entries) {
       const c = el('div', 'help-card');
@@ -641,11 +701,12 @@ export class UI {
     this.playfield.addEventListener('pointercancel', () => { this.drag = null; });
     this.boardEl.addEventListener('keydown', (e) => this.onKey(e));
     document.addEventListener('keydown', (e) => {
-      if (this.screen !== 'play') return;
-      if (e.key === 'Escape') { e.preventDefault(); this.escPressed(); }
-      if (e.key.toLowerCase() === 'd') { this.doDeal(); }
-      if (e.key.toLowerCase() === 'h') { this.doHint(); }
-      if (e.key.toLowerCase() === 'u') { this.doUndo(); }
+      if (this.screen !== 'play' || e.ctrlKey || e.metaKey || e.altKey) return;
+      const a = this.keyAction[e.code];
+      if (a === 'pause') { e.preventDefault(); this.escPressed(); }
+      else if (a === 'deal') this.doDeal();
+      else if (a === 'hint') this.doHint();
+      else if (a === 'undo') this.doUndo();
     });
     window.addEventListener('resize', () => this.onResize());
     document.addEventListener('visibilitychange', () => {
@@ -729,9 +790,10 @@ export class UI {
 
   onKey(e) {
     if (this.screen !== 'play') return;
-    const map = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
-    if (map[e.key]) { e.preventDefault(); this.moveFocus(...map[e.key]); }
-    else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.confirmFocus(); }
+    const map = { left: [-1, 0], right: [1, 0], up: [0, -1], down: [0, 1] };
+    const a = this.keyAction[e.code];
+    if (map[a]) { e.preventDefault(); this.moveFocus(...map[a]); }
+    else if (a === 'confirm') { e.preventDefault(); this.confirmFocus(); }
   }
 
   moveFocus(dx, dy) {
@@ -1104,8 +1166,6 @@ export class UI {
     if (this.history.length > 50) this.history.shift();
     this.saveProgress();
     this.platform.saveLocal(HISTORY_KEY, this.history);
-    if (newly.length) this.platform.reportAchievements?.(newly);
-    if (def.ranked && st.status !== 'aborted') this.platform.submitScore?.(def, this.session.replayEnvelope());
 
     const headline = won ? '🕸 All webs cleared!' : st.status === 'aborted' ? 'Round abandoned' : 'The weave holds…';
     this.modal(headline, (body, close) => {

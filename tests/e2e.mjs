@@ -10,11 +10,10 @@
  * visible element to click next; every action goes through real UI input.
  *
  * The repo's server.js is the StarHermit authoritative game server, so this
- * test embeds a minimal static file server (ephemeral port) instead. The game
- * probes /api/v1/time to detect a hosted backend; served 404 here, so the
- * platform runs in its documented offline local mode — the resulting
- * "Failed to load resource ... 404" console entries for /api/v1/* are
- * expected and filtered as benign.
+ * test embeds a minimal static file server (ephemeral port) instead.
+ * Standalone (no launch token) the game must make zero same-origin /api or
+ * /ws requests — each standalone pass asserts it. The signed-in pass stubs
+ * the platform API and GET /api/v1/time (allowed only with a token).
  *
  * Two passes: desktop 1280x800, then a fresh context at mobile 390x844
  * (hasTouch). Any non-benign pageerror/console error fails the run.
@@ -63,18 +62,85 @@ const browser = await chromium.launch({
 
 const step = async (name, fn) => { await fn(); console.log(`ok - ${name}`); };
 
-async function playthrough(ctxOpts, tag, maxHintMoves) {
+// StarHermit routes (the game's own /api/v1 time/score/leaderboard are separate).
+const PLATFORM_API = /^\/api\/v1\/(games|users|me|leaderboards|chat)\//;
+// Any own-server route: forbidden in a standalone load.
+const OWN_SERVER = /^\/(api|ws)(\/|$)/;
+
+// Signed-in pass: launch token in the fragment, platform API stubbed.
+async function platformPass(ctxOpts, tag) {
   const context = await browser.newContext(ctxOpts);
   const page = await context.newPage();
   page.setDefaultTimeout(15000);
-  const errors = [];
+  const errors = [], seen = [];
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
   page.on('console', (m) => {
     if (m.type() !== 'error' && m.type() !== 'warning') return;
     const text = m.text();
     if (browserNoise.test(text)) return;
-    // Offline-mode probe of the (absent) StarHermit backend: expected 404s.
-    if (text.includes('Failed to load resource') && (m.location()?.url || '').includes('/api/v1/')) return;
+    errors.push(`console ${m.type()}: ${text}`);
+  });
+  await page.route((url) => url.pathname === '/api/v1/time', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ now: Date.now() }) }));
+  const b64u = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
+  const jwt = `${b64u({ alg: 'none' })}.${b64u({ sub: 'u-e2e-0001', game_scope: 'eight-webs', exp: Math.floor(Date.now() / 1000) + 3600 })}.sig`;
+  await page.route((url) => PLATFORM_API.test(url.pathname), (route) => {
+    const req = route.request(), u = new URL(req.url());
+    seen.push(req.method() + ' ' + u.pathname);
+    const json = (o) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(o) });
+    if (u.pathname.endsWith('/profile')) return json({ nickname: 'Pip Tester' });
+    if (u.pathname.endsWith('/settings') && req.method() === 'GET') return json({ settings: { highContrast: true } });
+    if (u.pathname.endsWith('/controls')) return json({ actions: [{ action: 'hint', codes: ['KeyJ'] }] });
+    return route.fulfill({ status: 204 });
+  });
+  const click = (loc) => (ctxOpts.hasTouch ? loc.tap() : loc.click());
+  try {
+    await step(`[${tag}] signed in: nickname, save load, fragment stripped`, async () => {
+      await page.goto(`${BASE}/#game_token=${jwt}`, { waitUntil: 'load' });
+      await page.waitForFunction(() => /Pip Tester/.test(document.querySelector('.title-platform')?.textContent || ''), null, { timeout: 8000 });
+      if (await page.evaluate(() => location.hash)) throw new Error('launch fragment not stripped');
+      if (await page.locator('.btn-signin').count()) throw new Error('sign-in shown while signed in');
+      if (!seen.includes('GET /api/v1/me/cloud-saves/' + encodeURIComponent('game:eight-webs'))) throw new Error('no cloud load: ' + seen.join(', '));
+    });
+    await step(`[${tag}] platform settings applied (high contrast)`, async () => {
+      await page.waitForFunction(() => window.__eightwebs?.ui?.settings?.highContrast === true, null, { timeout: 5000 });
+    });
+    await step(`[${tag}] invite a friend shows a confirmation toast`, async () => {
+      const btn = page.locator('.btn-invite');
+      await btn.scrollIntoViewIfNeeded();
+      await click(btn);
+      await page.waitForSelector('.toast', { timeout: 3000 });
+      const box = await page.locator('.toast').first().boundingBox();
+      const vw = ctxOpts.viewport.width;
+      if (!box || box.x < 0 || box.x + box.width > vw + 1) throw new Error('toast off-screen ' + JSON.stringify(box));
+      await page.screenshot({ path: SHOT('platform', tag) });
+    });
+    await step(`[${tag}] help lists the platform key binding`, async () => {
+      const help = page.getByRole('button', { name: 'Help' }).first();
+      await help.scrollIntoViewIfNeeded();
+      await click(help);
+      await page.waitForFunction(() => /J hints/.test(document.body.textContent), null, { timeout: 3000 });
+    });
+  } finally {
+    await context.close();
+  }
+  if (errors.length) throw new Error(`[${tag}] page errors:\n${errors.join('\n')}`);
+}
+
+async function playthrough(ctxOpts, tag, maxHintMoves) {
+  const context = await browser.newContext(ctxOpts);
+  const page = await context.newPage();
+  page.setDefaultTimeout(15000);
+  const errors = [];
+  page.on('request', (r) => {
+    const u = new URL(r.url());
+    if (u.origin === new URL(BASE).origin && OWN_SERVER.test(u.pathname)) errors.push('standalone made an own-server call: ' + r.url());
+  });
+  page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
+  page.on('console', (m) => {
+    if (m.type() !== 'error' && m.type() !== 'warning') return;
+    const text = m.text();
+    if (browserNoise.test(text)) return;
     errors.push(`console ${m.type()}: ${text}`);
   });
 
@@ -274,6 +340,8 @@ async function playthrough(ctxOpts, tag, maxHintMoves) {
 try {
   await playthrough({ viewport: { width: 1280, height: 800 } }, 'desktop', 12);
   await playthrough({ viewport: { width: 390, height: 844 }, hasTouch: true }, 'mobile', 6);
+  await platformPass({ viewport: { width: 1280, height: 800 } }, 'platform-desktop');
+  await platformPass({ viewport: { width: 390, height: 844 }, hasTouch: true }, 'platform-mobile');
   console.log('\nE2E PASS — both viewport passes clean, no page errors');
 } finally {
   await browser.close();

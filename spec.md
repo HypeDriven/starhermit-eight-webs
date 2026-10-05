@@ -157,6 +157,7 @@ Input locking: the board ignores taps unless `Session.inRound()` (active or tuto
 - Landscape ≤ 500 px tall: top bar 40 px and tray 48 px; title/results art hidden so controls stay on screen.
 - Safe areas: the shell pads all four `env(safe-area-inset-*)`; `viewport-fit=cover`.
 - The board layout (`computeLayout`) fits ten columns to the playfield width and compresses card overlap so the longest column always fits the height; nothing on the table scrolls or clips. Menus scroll vertically (`justify-content: safe center`) so the Back button is always reachable.
+- Large screens: `ui-scale.js` (loaded first in `<head>`) sets `--ui-scale` — 1 up to a 1600×1000 viewport, then min(width/1600, height/1000) capped at 2.5 — and `#app` (shell, rails, board, menus, modals, toasts) plus the FPS meter are CSS-`zoom`ed by it, with their vw/vh/dvh/cqw lengths divided by it, so the whole layout grows proportionally; the WebGL table multiplies its pixel ratio by it so it stays sharp.
 
 ## 8. Art direction
 

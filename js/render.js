@@ -717,7 +717,7 @@ export class TableRenderer {
 
   _targetRatio() {
     const g = this.q;
-    return Math.min(window.devicePixelRatio || 1, g.cap) * g.scale * this.adaptiveScale;
+    return Math.min(window.devicePixelRatio || 1, g.cap) * ((window.UIScale && UIScale.value) || 1) * g.scale * this.adaptiveScale;
   }
 
   resize() {

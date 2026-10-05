@@ -15,7 +15,9 @@ body {
   background: #14161d; color: #e8eaef; line-height: 1.5;
   overscroll-behavior: none;
 }
-#app { height: 100dvh; width: 100vw; }
+#app { height: calc(100dvh / var(--ui-scale, 1)); width: calc(100vw / var(--ui-scale, 1)); }
+/* Large screens: the app and body-level overlays zoom by --ui-scale (ui-scale.js); vw/vh inside them are divided by it. */
+#app, #fps-meter { zoom: var(--ui-scale, 1); }
 .sr-only {
   position: absolute; width: 1px; height: 1px; overflow: hidden;
   clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
@@ -90,8 +92,8 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible, select:focu
   touch-action: none;
 }
 .card.face-down { background: var(--felt); border-color: rgba(0,0,0,.35); cursor: default; }
-.card .rank { position: absolute; top: 2px; left: 7%; font-weight: 700; font-size: max(12px, 1.4cqw); line-height: 1.1; color: var(--suit, #333); }
-.card .glyph { position: absolute; inset: 0; display: grid; place-items: center; font-size: max(14px, 2.4cqw); color: var(--suit, #333); }
+.card .rank { position: absolute; top: 2px; left: 7%; font-weight: 700; font-size: max(12px, calc(1.4cqw / var(--ui-scale, 1))); line-height: 1.1; color: var(--suit, #333); }
+.card .glyph { position: absolute; inset: 0; display: grid; place-items: center; font-size: max(14px, calc(2.4cqw / var(--ui-scale, 1))); color: var(--suit, #333); }
 .card.selected { outline: 3px solid var(--select); transform: translateY(-4px); box-shadow: 0 6px 14px rgba(0,0,0,.35); }
 .card.hinted { outline: 3px dashed var(--accent); }
 .card.kbd-focus { outline: 3px solid var(--select); outline-offset: 1px; }
@@ -114,7 +116,7 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible, select:focu
 }
 .modal {
   background: var(--panel); color: var(--ink); border-radius: 14px;
-  padding: 1.2rem 1.4rem; max-width: min(560px, 94vw); max-height: 88dvh; overflow-y: auto;
+  padding: 1.2rem 1.4rem; max-width: min(560px, calc(94vw / var(--ui-scale, 1))); max-height: calc(88dvh / var(--ui-scale, 1)); overflow-y: auto;
   box-shadow: 0 12px 40px rgba(0,0,0,.4);
 }
 .modal h2 { margin-bottom: .7rem; }
@@ -125,9 +127,9 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible, select:focu
   background: var(--paper); color: var(--ink); padding: 1.5rem; overflow-y: auto;
   text-align: center;
 }
-.title-screen h1 { font-size: clamp(2rem, 7vw, 3.4rem); letter-spacing: .06em; }
+.title-screen h1 { font-size: clamp(2rem, calc(7vw / var(--ui-scale, 1)), 3.4rem); letter-spacing: .06em; }
 .title-art {
-  width: min(640px, 92vw); aspect-ratio: 16 / 9; max-height: min(30dvh, 300px); object-fit: cover;
+  width: min(640px, calc(92vw / var(--ui-scale, 1))); aspect-ratio: 16 / 9; max-height: min(calc(30dvh / var(--ui-scale, 1)), 300px); object-fit: cover;
   background: var(--felt); border-radius: 12px; border: 1px solid var(--rule); box-shadow: 0 10px 30px rgba(0,0,0,.25);
 }
 .results-art { width: 100%; aspect-ratio: 16 / 9; max-height: 150px; object-fit: cover; background: var(--felt); border-radius: 10px; border: 1px solid var(--rule); }
@@ -137,10 +139,10 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible, select:focu
 .title-progress { opacity: .6; font-size: .9rem; }
 .title-platform { display: flex; flex-wrap: wrap; gap: .5rem; justify-content: center; align-items: center; }
 .title-platform .title-progress { flex-basis: 100%; text-align: center; margin: 0; overflow-wrap: anywhere; }
-.menu-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: .7rem; width: min(720px, 92vw); }
+.menu-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: .7rem; width: min(720px, calc(92vw / var(--ui-scale, 1))); }
 .mode-card { display: flex; flex-direction: column; gap: .25rem; padding: 1rem; text-align: left; }
 .mode-card span { font-size: .85rem; opacity: .7; }
-.menu-list { display: flex; flex-direction: column; gap: .5rem; width: min(640px, 92vw); }
+.menu-list { display: flex; flex-direction: column; gap: .5rem; width: min(640px, calc(92vw / var(--ui-scale, 1))); }
 .setup-card {
   position: relative; display: flex; flex-direction: column; gap: .15rem;
   border: 1px solid var(--rule); border-radius: 10px; padding: .7rem .9rem;
@@ -156,18 +158,18 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible, select:focu
 .setup-card .note { opacity: .65; font-style: italic; }
 .seed-row { display: flex; gap: .5rem; margin-top: .8rem; }
 .seed-row input { font: inherit; padding: .45rem .7rem; border: 1px solid var(--rule); border-radius: 8px; min-height: 44px; }
-.help-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .7rem; width: min(860px, 92vw); text-align: left; }
+.help-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .7rem; width: min(860px, calc(92vw / var(--ui-scale, 1))); text-align: left; }
 .help-card { border: 1px solid var(--rule); border-radius: 10px; padding: .8rem; background: var(--panel); }
 .help-card p { font-size: .88rem; opacity: .8; margin-top: .25rem; }
 .score-row { border-bottom: 1px solid var(--rule); padding: .4rem 0; font-size: .85rem; text-align: left; }
 .toast {
   position: absolute; left: 50%; bottom: 12%; transform: translateX(-50%);
   background: var(--ink); color: var(--paper); padding: .6rem 1rem;
-  border-radius: 10px; max-width: min(520px, 90vw); box-shadow: 0 6px 20px rgba(0,0,0,.35);
+  border-radius: 10px; max-width: min(520px, calc(90vw / var(--ui-scale, 1))); box-shadow: 0 6px 20px rgba(0,0,0,.35);
 }
 .countdown {
   position: absolute; inset: 0; display: grid; place-items: center;
-  font-size: clamp(4rem, 20vw, 9rem); font-weight: 800; color: var(--accent);
+  font-size: clamp(4rem, calc(20vw / var(--ui-scale, 1)), 9rem); font-weight: 800; color: var(--accent);
   background: rgba(10,10,16,.35);
 }
 .caption {
@@ -230,7 +232,7 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible, select:focu
   .rail { display: none; }
 }
 @media (max-width: 1023px) and (orientation: portrait) {
-  .playfield { min-height: 55dvh; }
+  .playfield { min-height: calc(55dvh / var(--ui-scale, 1)); }
 }
 @media (orientation: landscape) and (max-height: 500px) { /* landscape mobile */
   .bottom-tray { min-height: 48px; padding: .3rem; }
@@ -244,6 +246,7 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible, select:focu
 .reduced-motion .card.selected { transform: none; }
 </style>
 <script type="importmap">{"imports":{"three":"./vendor/three.module.js","three/addons/":"./vendor/addons/"}}</script>
+<script src="ui-scale.js"></script>
 <script src="browser-guard.js"></script>
 </head>
 <body>

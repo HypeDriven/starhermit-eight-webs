@@ -111,7 +111,7 @@ async function platformPass(ctxOpts, tag) {
       await click(btn);
       await page.waitForSelector('.toast', { timeout: 3000 });
       const box = await page.locator('.toast').first().boundingBox();
-      const vw = ctxOpts.viewport.width;
+      const vw = page.viewportSize().width;
       if (!box || box.x < 0 || box.x + box.width > vw + 1) throw new Error('toast off-screen ' + JSON.stringify(box));
       await page.screenshot({ path: SHOT('platform', tag) });
     });

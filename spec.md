@@ -13,7 +13,7 @@ Present-tense description of the shipped game. Every statement below is true of 
 | Session length | Learn lesson 1–2 min; Journey/Practice/Daily round 10–40 min; Challenges 10–25 min |
 | Platforms | Desktop and mobile browsers (Chrome-class, ES modules, WebAudio, optional WebGL) |
 | Rendering | Three.js orthographic "shadow-box" scene under a fully interactive DOM card layer that uses the same layout model; the DOM layer alone is a complete game when WebGL is unavailable |
-| Entry | `index.html` (`launch` in `starhermit.txt`); optional authoritative `server.js` |
+| Entry | `index.html` (`launch` in `starhermit.txt`); platform script `score-script.js` (`server=`) |
 
 ### File map
 
@@ -31,7 +31,8 @@ Present-tense description of the shipped game. Every statement below is true of 
 | `js/render-helpers.js` | Re-exports `createStream`/`rankLabel` so render never imports rules-only internals |
 | `js/audio.js` | WebAudio buses, authored Opus clips with synthesized fallbacks, ambience loop, adaptive music, captions |
 | `js/platform.js` | localStorage persistence, StarHermit SDK layer, server clock (`GET /api/v1/time`, signed in only) |
-| `server.js` | Dependency-free Node server: static files and `/api/v1/time`; its daily/score/leaderboard/achievement routes and legacy `/api/session`, `/api/game/*` API are no longer called by the client |
+| `score-script.js` | StarHermit platform script (`server=score-script.js`): range-checks a finished ranked round's total and posts it to the `high-score` leaderboard (canonical copy in the games repo's `tools/score-script.js`) |
+| `server.js` | Local dev server (dependency-free Node): static files and `/api/v1/time`; its daily/score/leaderboard/achievement routes and legacy `/api/session`, `/api/game/*` API are no longer called by the client |
 | `starhermit.txt` | Platform manifest (`name`, `launch`, `owner`, `server`, `cover`) |
 | `starhermit_zh.txt` | Chinese-language server/network chapter that the legacy `/api/session` routes follow; the browser client does not call those routes |
 | `tests/run-tests.mjs` | 35 offline rules/content/session/graphics-model tests (`npm test`) |
@@ -246,11 +247,12 @@ Conventions follow https://wiki.starhermit.com/. All platform I/O goes through `
 | Own server | Signed in only: `GET /api/v1/time` (Bearer) on boot and on sign-in. Standalone (no launch token) the game makes no own-server requests at all and uses the local clock. A launch token enables platform identity, cloud save, settings and controls (`tokenHosted`) | `Platform.syncServerTime` |
 | Server clock | Round-trip-adjusted offset (0 standalone) stamps replay envelopes and picks the Scores screen's UTC day | `serverOffsetMs` |
 | Cloud save | Signed in, the progress document is mirrored with `StarHermit.saveJSON` (2 s debounce) to `/api/v1/me/cloud-saves/game:<slug>`, flushed with keepalive on `pagehide`/hidden; remote wins on boot (`loadJSON`, version-checked); localStorage stays the offline cache | `Platform.saveLocal`, `Platform.loadCloudSave` |
-| Leaderboards | No own-server boards. The Scores screen lists the last 10 results and a "Daily board — <day> (this device)" of today's daily wins from local history | `UI.screenScores` |
+| Platform leaderboard | Signed in, every ranked round (Daily, Challenges, Journey mastery stages) that ends won or lost — not given up — posts its total through `StarHermit.submitScores` (a practice session whose `score-script.js` posts it to the `high-score` board: integer, higher is better, 0–20,000). The results modal shows "Posting score to the leaderboard…", then "Leaderboard rank: #N" (or posted / not posted), in the nine locales. Unrated rounds and standalone play post nothing and show no line | `UI.postToLeaderboard`, `Platform.submitScore` |
+| Leaderboards (in game) | No own-server boards. The Scores screen lists the last 10 results and a "Daily board — <day> (this device)" of today's daily wins from local history | `UI.screenScores` |
 | Achievements | Local only (part of the cloud-mirrored progress doc) | `UI.onRoundEnd` |
 | Sessions / presence | Not used by the client. The server also exposes `/api/v1/daily/start|command|session/:id` (authoritative daily sessions) and the legacy `/api/session`, `/api/settings`, `/api/game/*` routes from `starhermit_zh.txt`; the browser plays dailies locally and never calls them | `server.js` |
 | Telemetry | None |
-| Multiplayer | None. Platform sessions, matchmaking, session invites, chat, replays, realtime and voice are not used (`server.js` is not a platform session script), and platform achievements/leaderboards are not used (the game's server reports none to the platform). New platform strings (status line, sign-in, invite, toasts) are localized in the nine locales | — |
+| Multiplayer | None. Platform sessions, matchmaking, session invites, chat, replays, realtime and voice are not used (`server.js` is not a platform session script), and platform achievements are not used. New platform strings (status line, sign-in, invite, toasts, leaderboard line) are localized in the nine locales | — |
 
 ## 13. Technical architecture
 
@@ -305,7 +307,7 @@ Conventions follow https://wiki.starhermit.com/. All platform I/O goes through `
 
 - Ship the nine required locales with a string table and a language setting (auto-detect from `navigator.language`, en-US fallback).
 - Apply each Journey web's theme on stage start (with the player's setting as an override).
-- Shared daily/global boards via the platform leaderboard API (the own-server boards are not used).
+- In-game browsing of the platform leaderboard (the Scores screen is still local; only the results rank line reads the platform board).
 - Make **Hold to drag** switch between tap-to-lift and press-and-hold lifting.
 
 ## Browser interference

@@ -7,8 +7,9 @@
 // boot; debounced saves with a pagehide flush), the settings KV, key
 // bindings, sign-in and invite link. The only own-server call is GET
 // /api/v1/time, made only with a launch token; standalone play makes no
-// own-server requests and uses the local clock. Scores, history and
-// achievements stay local.
+// own-server requests and uses the local clock. Signed in, a finished ranked
+// round's total goes to the StarHermit `high-score` leaderboard through
+// StarHermit.submitScores (score-script.js). History and achievements stay local.
 
 export const PLATFORM_VERSION = 1;
 
@@ -193,4 +194,20 @@ export class Platform {
   serverNow() { return Date.now() + this.offsetMs; }
 
   recordResult() { /* results are persisted locally by the session */ }
+
+  /* Post a finished ranked round to the StarHermit leaderboards (score-script.js);
+     resolves { posted, rank } — rank on the high-score board, or null. Signed in only. */
+  async submitScore(total) {
+    const s = sdk();
+    if (!s || !this.tokenHosted) return { posted: false, rank: null };
+    try {
+      const keys = await s.submitScores({ 'high-score': total });
+      if (!(keys || []).includes('high-score')) return { posted: false, rank: null };
+      try {
+        const r = await s.leaderboard('high-score', { pageSize: 100 });
+        const me = (r.items || []).find((i) => i.userId === s.userId);
+        return { posted: true, rank: me ? me.rank : null };
+      } catch { return { posted: true, rank: null }; }
+    } catch { return { posted: false, rank: null }; }
+  }
 }

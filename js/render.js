@@ -924,10 +924,10 @@ export class TableRenderer {
       const key = this._postKey();
       if (key !== this.postKey) { this.postKey = key; this._buildPost(); }
       if (this.composer) {
-        try { this.composer.render(dt / 1000); }
+        try { (globalThis.GameOptions ? globalThis.GameOptions.draw(this.composer.renderer, () => this.composer.render(dt / 1000)) : this.composer.render(dt / 1000)); }
         catch { this.postFailed = true; this.composer = null; }
       } else {
-        this.renderer.render(this.scene, this.camera);
+        (globalThis.GameOptions ? globalThis.GameOptions.draw(this.renderer, () => this.renderer.render(this.scene, this.camera)) : this.renderer.render(this.scene, this.camera));
       }
     };
     tick();

@@ -54,7 +54,7 @@ export class AudioEngine {
         for (const name of ['music', 'effects', 'ambience', 'voice']) {
           const g = this.ctx.createGain();
           g.connect(master);
-          this.buses[name] = g;
+          this.buses[name] = (globalThis.GameOptions ? globalThis.GameOptions.tagBus(g, name) : g);
         }
         this.applyVolumes();
         this.loadSamples();
@@ -92,7 +92,7 @@ export class AudioEngine {
   playSample(name, bus = 'effects', gain = 0.5) {
     const buf = this.samples?.[name];
     if (!buf || !this.ctx) return false;
-    const src = this.ctx.createBufferSource();
+    const src = (globalThis.GameOptions ? globalThis.GameOptions.trackSource(this.ctx.createBufferSource(), bus) : this.ctx.createBufferSource());
     src.buffer = buf;
     const g = this.ctx.createGain(); g.gain.value = gain;
     src.connect(g); g.connect(this.buses[bus]);
@@ -110,7 +110,7 @@ export class AudioEngine {
     const entry = this.sfx[name] ||= { buffer: null, loading: false, failed: false };
     if (entry.failed) return false;
     if (entry.buffer) {
-      const src = this.ctx.createBufferSource();
+      const src = (globalThis.GameOptions ? globalThis.GameOptions.trackSource(this.ctx.createBufferSource(), null) : this.ctx.createBufferSource());
       src.buffer = entry.buffer;
       src.connect(this.buses.effects);
       src.start();
@@ -132,7 +132,7 @@ export class AudioEngine {
   blip(bus, { freq = 440, dur = 0.08, type = 'sine', gain = 0.2, slide = 0 }) {
     if (!this.ensure()) return;
     const t = this.ctx.currentTime;
-    const osc = this.ctx.createOscillator();
+    const osc = (globalThis.GameOptions ? globalThis.GameOptions.trackSource(this.ctx.createOscillator(), bus) : this.ctx.createOscillator());
     const g = this.ctx.createGain();
     osc.type = type;
     osc.frequency.setValueAtTime(freq, t);
@@ -150,7 +150,7 @@ export class AudioEngine {
     const buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
     const d = buf.getChannelData(0);
     for (let i = 0; i < len; i++) d[i] = (this.stream.next() * 2 - 1) * (1 - i / len);
-    const src = this.ctx.createBufferSource();
+    const src = (globalThis.GameOptions ? globalThis.GameOptions.trackSource(this.ctx.createBufferSource(), bus) : this.ctx.createBufferSource());
     src.buffer = buf;
     const filt = this.ctx.createBiquadFilter();
     filt.type = 'bandpass'; filt.frequency.value = freq;
@@ -205,7 +205,7 @@ export class AudioEngine {
     const d = buf.getChannelData(0);
     let last = 0;
     for (let i = 0; i < len; i++) { last = last * 0.98 + (this.stream.next() * 2 - 1) * 0.02; d[i] = last * 8; }
-    const src = this.ctx.createBufferSource();
+    const src = (globalThis.GameOptions ? globalThis.GameOptions.trackSource(this.ctx.createBufferSource(), null) : this.ctx.createBufferSource());
     src.buffer = buf; src.loop = true;
     const filt = this.ctx.createBiquadFilter();
     filt.type = 'lowpass'; filt.frequency.value = 400;
@@ -225,7 +225,7 @@ export class AudioEngine {
       .then((raw) => this.ctx ? this.ctx.decodeAudioData(raw) : null)
       .then((buf) => {
         if (!buf || !this.ctx || !this.ambienceNodes) return;
-        const src = this.ctx.createBufferSource();
+        const src = (globalThis.GameOptions ? globalThis.GameOptions.trackSource(this.ctx.createBufferSource(), null) : this.ctx.createBufferSource());
         src.buffer = buf; src.loop = true;
         const g = this.ctx.createGain(); g.gain.value = 0.6;
         src.connect(g); g.connect(this.buses.ambience);
@@ -247,7 +247,7 @@ export class AudioEngine {
     // Bundled music bed (looped) under the adaptive procedural stems.
     const bed = this.samples?.music;
     if (bed && !this.musicBed) {
-      const src = this.ctx.createBufferSource();
+      const src = (globalThis.GameOptions ? globalThis.GameOptions.trackSource(this.ctx.createBufferSource(), null) : this.ctx.createBufferSource());
       src.buffer = bed; src.loop = true;
       const g = this.ctx.createGain(); g.gain.value = 0.35;
       src.connect(g); g.connect(this.buses.music);

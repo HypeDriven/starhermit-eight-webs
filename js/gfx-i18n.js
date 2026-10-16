@@ -1,6 +1,7 @@
-// Eight Webs — strings for the Settings button and Graphics panel in the nine
-// supported locales. The rest of the game is English-only (spec §10); these
-// panel strings follow navigator.language with an en-US fallback.
+// Eight Webs — strings for the Graphics panel in the nine supported locales.
+// They follow the game language (js/i18n.js getLang()), en-US fallback.
+
+import { getLang } from './i18n.js';
 
 const EN = {
   settings: 'Settings', close: 'Close', graphics: 'Graphics',
@@ -140,7 +141,7 @@ export function pickLocale(tag) {
   return 'en-US';
 }
 
-export function gfxStrings(tag = (typeof navigator !== 'undefined' ? navigator.language : 'en-US')) {
+export function gfxStrings(tag = getLang()) {
   return GFX_STRINGS[pickLocale(tag)];
 }
 

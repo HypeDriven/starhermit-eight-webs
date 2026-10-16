@@ -183,7 +183,7 @@ export class Session {
     const action = { type: 'move', from, idx, to };
     const gate = this.lessonGate(action);
     if (gate) {
-      this.emit({ type: 'lesson-blocked', message: gate });
+      this.emit({ type: 'lesson-blocked', message: gate, stepText: this.currentLessonStep()?.text });
       this.selection = null;
       this.emit({ type: 'select', selection: null });
       return { error: 'lesson-gated' };
@@ -205,7 +205,7 @@ export class Session {
     if (!this.inRound()) return { error: 'not-active' };
     const gate = this.lessonGate({ type: 'deal' });
     if (gate) {
-      this.emit({ type: 'lesson-blocked', message: gate });
+      this.emit({ type: 'lesson-blocked', message: gate, stepText: this.currentLessonStep()?.text });
       return { error: 'lesson-gated' };
     }
     if (this.state.stock.length === 0) return { error: 'stock-empty' };
@@ -336,6 +336,10 @@ export class Session {
       this.emit({ type: 'round', def: this.def, state: this.state });
       this.emit({
         type: 'while-away',
+        away: {
+          min: Math.max(1, Math.round(awayMs / 60000)), webs: this.state.foundations,
+          goal: this.state.webGoal, score: this.state.score.total,
+        },
         summary: `Round restored. You were away ${Math.max(1, Math.round(awayMs / 60000))} min; ` +
           `${this.state.foundations}/${this.state.webGoal} webs cleared, score ${this.state.score.total}.`,
       });
@@ -405,4 +409,31 @@ export class Session {
     };
     this.platform.recordResult(result, this.replayEnvelope());
   }
+}
+
+// Merge two progress documents after a cloud-save conflict (another device
+// wrote the slot). Progress only grows: journey stages keep the higher score,
+// lessons, mastery and play days are unions, achievements keep the earliest
+// unlock, bests and websCleared take the maximum.
+export function mergeProgress(remote, local) {
+  if (!remote) return local;
+  if (!local) return remote;
+  const out = { ...remote, ...local, v: 1 };
+  const journey = { ...(remote.journey || {}) };
+  for (const [id, v] of Object.entries(local.journey || {})) {
+    const r = journey[id];
+    journey[id] = !r || (v && v.score > r.score) ? v : r;
+  }
+  out.journey = journey;
+  out.lessonsDone = { ...(remote.lessonsDone || {}), ...(local.lessonsDone || {}) };
+  out.mastery = { ...(remote.mastery || {}), ...(local.mastery || {}) };
+  const ach = { ...(remote.achievements || {}) };
+  for (const [k, at] of Object.entries(local.achievements || {})) ach[k] = ach[k] && ach[k] < at ? ach[k] : at;
+  out.achievements = ach;
+  const bests = { ...(remote.bests || {}) };
+  for (const [id, sc] of Object.entries(local.bests || {})) bests[id] = Math.max(bests[id] ?? -Infinity, sc);
+  out.bests = bests;
+  out.daysPlayed = [...new Set([...(remote.daysPlayed || []), ...(local.daysPlayed || [])])].sort();
+  out.websCleared = Math.max(remote.websCleared || 0, local.websCleared || 0);
+  return out;
 }

@@ -15,14 +15,23 @@ test.afterEach(() => { globalThis.StarHermit?.signOut(); });
 
 async function boot(hash) {
   const calls = [];
-  const store = { save: null, settings: {} };
+  const store = { save: null, settings: {}, version: 0, etag: null };
   globalThis.fetch = async (url, init = {}) => {
     const method = init.method || 'GET';
     calls.push({ url, method, init });
-    const json = (o) => new Response(JSON.stringify(o), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    const json = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { 'Content-Type': 'application/json' } });
     if (url.endsWith('/api/v1/users/u-12345678/profile')) return json({ nickname: 'Pip' });
     if (url.includes('/api/v1/me/cloud-saves/')) {
-      if (method === 'PUT') { store.save = Buffer.from(JSON.parse(init.body).dataBase64, 'base64'); return new Response(null, { status: 204 }); }
+      // Conditional writes: the SDK sends If-Match with the ETag it last saw;
+      // a newer save from "another device" (store.etag bumped) answers 412.
+      if (url.endsWith('/info')) return json({ exists: !!store.save, etag: store.etag });
+      if (method === 'PUT') {
+        const ifMatch = init.headers && init.headers['If-Match'];
+        if (ifMatch && ifMatch !== store.etag) return json({ error: 'precondition_failed', etag: store.etag }, 412);
+        store.save = Buffer.from(JSON.parse(init.body).dataBase64, 'base64');
+        store.etag = '"v' + (++store.version) + '"';
+        return json({ etag: store.etag });
+      }
       return store.save ? new Response(store.save, { status: 200 }) : new Response('', { status: 404 });
     }
     if (url.endsWith(`/api/v1/games/${SLUG}/settings`)) {
@@ -57,6 +66,41 @@ test('launch token: read from the fragment, stripped, slug from claims', async (
   assert.equal(window.location.hash, '');
   assert.equal(P.token, JWT);
   assert.equal(P.identityId, 'u-12345678');
+});
+
+test('a lost cloud write (412) is reported as a save conflict and cleared by a reload', async () => {
+  const { P, store } = await boot('#game_token=' + JWT);
+  let conflicts = 0;
+  P.onSaveConflict(() => conflicts++);
+  assert.equal(await P.loadCloudSave(), null);
+  P.saveLocal('eightwebs:progress', { v: 1, websCleared: 1 });
+  assert.equal(await P.flushSave(true), true);
+  store.etag = '"elsewhere"'; // another device saved since
+  P.saveLocal('eightwebs:progress', { v: 1, websCleared: 2 });
+  assert.equal(await P.flushSave(true), false);
+  assert.equal(conflicts, 1);
+  assert.equal(P.saveConflicted(), true);
+  await P.loadCloudSave();
+  assert.equal(P.saveConflicted(), false);
+  P.saveLocal('eightwebs:progress', { v: 1, websCleared: 3 });
+  assert.equal(await P.flushSave(true), true, 'the reload unblocks writes');
+});
+
+test('mergeProgress keeps the better side of every record', async () => {
+  const { mergeProgress } = await import('../js/session.js');
+  const m = mergeProgress(
+    { v: 1, journey: { 'journey-1': { score: 900, at: 1 }, 'journey-2': { score: 100, at: 1 } }, lessonsDone: { 'learn-1': true },
+      achievements: { first_web: 5 }, websCleared: 12, daysPlayed: ['2026-10-01'], bests: { a: 10 }, mastery: { m1: true } },
+    { v: 1, journey: { 'journey-2': { score: 300, at: 2 }, 'journey-3': { score: 50, at: 2 } }, lessonsDone: { 'learn-2': true },
+      achievements: { first_web: 9, streak_5: 3 }, websCleared: 8, daysPlayed: ['2026-10-02'], bests: { a: 5, b: 7 }, mastery: {} });
+  assert.deepEqual(Object.keys(m.journey).sort(), ['journey-1', 'journey-2', 'journey-3']);
+  assert.equal(m.journey['journey-2'].score, 300);
+  assert.deepEqual(Object.keys(m.lessonsDone).sort(), ['learn-1', 'learn-2']);
+  assert.deepEqual(m.achievements, { first_web: 5, streak_5: 3 });
+  assert.equal(m.websCleared, 12);
+  assert.deepEqual(m.daysPlayed, ['2026-10-01', '2026-10-02']);
+  assert.deepEqual(m.bests, { a: 10, b: 7 });
+  assert.deepEqual(m.mastery, { m1: true });
 });
 
 test('profile name comes from the profile nickname', async () => {

@@ -25,6 +25,7 @@ export class Platform {
     this.offsetMs = 0;              // server-minus-client clock offset
     this._syncListeners = new Set();
     this._authListeners = new Set();
+    this._conflictListeners = new Set();
     this._patch = null;
     this._patchTimer = null;
     this._patchWaiters = [];
@@ -32,6 +33,10 @@ export class Platform {
     if (s) {
       s.init(); // read the launch token before anything touches the fragment
       s.on('saved', (ok) => { if (this.tokenHosted) this._setSync(ok ? 'synced' : 'offline'); });
+      // Another device wrote the cloud slot: the UI reloads, merges and saves.
+      s.on('saveconflict', () => {
+        for (const fn of this._conflictListeners) { try { fn(); } catch { /* ok */ } }
+      });
       s.on('auth', (a) => {
         if (!(a && a.signedIn)) { this.profile = null; this._setSync('offline'); this.offsetMs = 0; }
         else this.syncServerTime().catch(() => {});
@@ -58,6 +63,9 @@ export class Platform {
   }
 
   onAuth(fn) { if (typeof fn === 'function') this._authListeners.add(fn); }
+  onSaveConflict(fn) { if (typeof fn === 'function') this._conflictListeners.add(fn); }
+  saveConflicted() { return !!sdk()?.saveConflicted?.(); }
+  cloudLoadFailed() { return !!sdk()?.saveLoadFailed?.(); }
   canSignIn() { return !!sdk()?.canSignIn(); }
   signIn() { return !!sdk()?.signIn(); }
   inviteLink() { return this.tokenHosted ? sdk()?.inviteLink() || null : null; }

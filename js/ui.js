@@ -11,8 +11,10 @@ import {
   practiceDef, dailyForDate, ACHIEVEMENTS,
 } from './content.js';
 import { computeLayout } from './render.js';
-import { CATEGORIES, PRESETS, presetTier, choosePreset, resolve as resolveGfx } from './gfx.js';
-import { gfxStrings, fmt, pickLocale } from './gfx-i18n.js';
+import { mergeProgress } from './session.js';
+import { CATEGORIES, PRESETS, presetTier, choosePreset, resolve as resolveGfx, describe as describeGfx } from './gfx.js';
+import { gfxStrings, fmt } from './gfx-i18n.js';
+import { T, N, getLang, onLanguage } from './i18n.js';
 
 const SETTINGS_KEY = 'eightwebs:settings';
 const PROGRESS_KEY = 'eightwebs:progress';
@@ -26,20 +28,6 @@ export const DEFAULT_SETTINGS = {
   leftHanded: false, holdToDrag: false, haptics: true, cvd: 'none', // none|deuter|protan|tritan
   cameraPreset: 'table',
 };
-
-// StarHermit strings (status line, sign-in, invite, toasts) in nine locales.
-const PT = {
-  'en-US': { offline: 'Offline — progress is stored on this device.', playing: 'Playing as {name}', synced: 'progress synced', saving: 'saving…', nosync: 'cloud sync unavailable', signIn: 'Sign in with StarHermit', invite: 'Invite a friend', copied: 'Invite link copied to the clipboard.', copyFail: 'Could not copy — invite link: {link}', lbPosting: "Posting score to the leaderboard…", lbRank: "Leaderboard rank: #{rank}", lbPosted: "Score posted to the leaderboard.", lbNotPosted: "Score not posted to the leaderboard." },
-  'en-GB': { offline: 'Offline — progress is stored on this device.', playing: 'Playing as {name}', synced: 'progress synced', saving: 'saving…', nosync: 'cloud sync unavailable', signIn: 'Sign in with StarHermit', invite: 'Invite a friend', copied: 'Invite link copied to the clipboard.', copyFail: 'Could not copy — invite link: {link}', lbPosting: "Posting score to the leaderboard…", lbRank: "Leaderboard rank: #{rank}", lbPosted: "Score posted to the leaderboard.", lbNotPosted: "Score not posted to the leaderboard." },
-  'es-419': { offline: 'Sin conexión: el progreso se guarda en este dispositivo.', playing: 'Jugando como {name}', synced: 'progreso sincronizado', saving: 'guardando…', nosync: 'sincronización en la nube no disponible', signIn: 'Iniciar sesión con StarHermit', invite: 'Invitar a un amigo', copied: 'Enlace de invitación copiado al portapapeles.', copyFail: 'No se pudo copiar. Enlace de invitación: {link}', lbPosting: "Enviando la puntuación a la clasificación…", lbRank: "Puesto en la clasificación: #{rank}", lbPosted: "Puntuación enviada a la clasificación.", lbNotPosted: "No se envió la puntuación a la clasificación." },
-  'es-ES': { offline: 'Sin conexión: el progreso se guarda en este dispositivo.', playing: 'Jugando como {name}', synced: 'progreso sincronizado', saving: 'guardando…', nosync: 'sincronización en la nube no disponible', signIn: 'Iniciar sesión con StarHermit', invite: 'Invitar a un amigo', copied: 'Enlace de invitación copiado al portapapeles.', copyFail: 'No se ha podido copiar. Enlace de invitación: {link}', lbPosting: "Enviando la puntuación a la clasificación…", lbRank: "Puesto en la clasificación: #{rank}", lbPosted: "Puntuación enviada a la clasificación.", lbNotPosted: "No se ha enviado la puntuación a la clasificación." },
-  'de-DE': { offline: 'Offline – der Fortschritt wird auf diesem Gerät gespeichert.', playing: 'Du spielst als {name}', synced: 'Fortschritt synchronisiert', saving: 'wird gespeichert…', nosync: 'Cloud-Synchronisierung nicht verfügbar', signIn: 'Mit StarHermit anmelden', invite: 'Freund einladen', copied: 'Einladungslink in die Zwischenablage kopiert.', copyFail: 'Kopieren fehlgeschlagen – Einladungslink: {link}', lbPosting: "Punktzahl wird an die Bestenliste gesendet …", lbRank: "Platz in der Bestenliste: #{rank}", lbPosted: "Punktzahl an die Bestenliste gesendet.", lbNotPosted: "Punktzahl nicht an die Bestenliste gesendet." },
-  'fr-FR': { offline: 'Hors ligne : la progression est enregistrée sur cet appareil.', playing: 'Vous jouez en tant que {name}', synced: 'progression synchronisée', saving: 'enregistrement…', nosync: 'synchronisation cloud indisponible', signIn: 'Se connecter avec StarHermit', invite: 'Inviter un ami', copied: 'Lien d’invitation copié dans le presse-papiers.', copyFail: 'Copie impossible — lien d’invitation : {link}', lbPosting: "Envoi du score au classement…", lbRank: "Rang au classement : #{rank}", lbPosted: "Score envoyé au classement.", lbNotPosted: "Score non envoyé au classement." },
-  'fr-CA': { offline: 'Hors ligne : la progression est enregistrée sur cet appareil.', playing: 'Vous jouez en tant que {name}', synced: 'progression synchronisée', saving: 'enregistrement…', nosync: 'synchronisation infonuagique non disponible', signIn: 'Se connecter avec StarHermit', invite: 'Inviter un ami', copied: 'Lien d’invitation copié dans le presse-papiers.', copyFail: 'Copie impossible — lien d’invitation : {link}', lbPosting: "Envoi du pointage au classement…", lbRank: "Rang au classement : #{rank}", lbPosted: "Pointage envoyé au classement.", lbNotPosted: "Pointage non envoyé au classement." },
-  'pt-BR': { offline: 'Offline — o progresso fica salvo neste dispositivo.', playing: 'Jogando como {name}', synced: 'progresso sincronizado', saving: 'salvando…', nosync: 'sincronização na nuvem indisponível', signIn: 'Entrar com StarHermit', invite: 'Convidar um amigo', copied: 'Link de convite copiado para a área de transferência.', copyFail: 'Não foi possível copiar — link de convite: {link}', lbPosting: "Enviando a pontuação para o ranking…", lbRank: "Posição no ranking: #{rank}", lbPosted: "Pontuação enviada para o ranking.", lbNotPosted: "A pontuação não foi enviada para o ranking." },
-  'it-IT': { offline: 'Offline: i progressi sono salvati su questo dispositivo.', playing: 'Giochi come {name}', synced: 'progressi sincronizzati', saving: 'salvataggio…', nosync: 'sincronizzazione cloud non disponibile', signIn: 'Accedi con StarHermit', invite: 'Invita un amico', copied: 'Link di invito copiato negli appunti.', copyFail: 'Impossibile copiare. Link di invito: {link}', lbPosting: "Invio del punteggio alla classifica…", lbRank: "Posizione in classifica: #{rank}", lbPosted: "Punteggio inviato alla classifica.", lbNotPosted: "Punteggio non inviato alla classifica." }
-};
-const P_STR = PT[pickLocale(typeof navigator !== 'undefined' ? navigator.language : 'en-US')] || PT['en-US'];
 
 // Keyboard actions as KeyboardEvent.code values; platform overrides apply via
 // StarHermit controls (control.* lines in starhermit.txt).
@@ -62,6 +50,32 @@ function el(tag, cls, text) {
   return e;
 }
 
+// Element whose text is a translation key: relabelled in place on a language change.
+function tx(tag, cls, key) {
+  const e = el(tag, cls, T(key));
+  e.dataset.i18n = key;
+  return e;
+}
+
+// Display title of a round definition (content keeps the US-English titles;
+// snapshots carry them too, so translate at display time).
+export function defTitle(def) {
+  const t = String(def?.title || '');
+  let m = /^(\d+)\. (.+)$/.exec(t);
+  if (m) return `${m[1]}. ${T(m[2])}`;
+  m = /^Daily — (.+)$/.exec(t);
+  if (m) return T('Daily — {date}', { date: m[1] });
+  m = /^Practice — (.+)$/.exec(t);
+  if (m) return T('Practice — {name}', { name: T(m[1]) });
+  return T(t);
+}
+
+const STATUS_TEXT = { won: N('WON'), lost: N('LOST'), aborted: N('ABANDONED') };
+const TERMINAL_TEXT = {
+  'all-runs': N('all webs cleared'), 'move-limit': N('move limit reached'), 'time-limit': N('time ran out'),
+  'no-moves': N('no moves left'), 'gave-up': N('gave up'),
+};
+
 export class UI {
   constructor(root, session, platform, renderer, audio) {
     this.root = root;
@@ -78,6 +92,7 @@ export class UI {
     };
     this.history = platform.loadLocal(HISTORY_KEY) || [];
     this.screen = 'title';
+    this.liveModals = new Set(); // dialogs re-rendered on a language change
     this.focusCard = null; // {col, idx} keyboard cursor
     this.drag = null;
     this.hintMove = null;
@@ -89,7 +104,47 @@ export class UI {
     // bindings win over the local ones.
     this.platform.onSync?.(() => this.refreshPlatformLine());
     this.platform.onAuth?.(() => { if (this.screen === 'title') this.show('title'); this.syncFromPlatform(); });
+    this.platform.onSaveConflict?.(() => this.mergeCloudConflict());
+    onLanguage(() => this.onLanguageChange());
     this.syncFromPlatform();
+  }
+
+  // Another device wrote the cloud slot since our last load (the SDK's
+  // conditional write got 412 and blocks further writes): reload the slot,
+  // merge it with this device's progress and save the merge back.
+  mergeCloudConflict() {
+    if (this._merging || !this.platform.tokenHosted) return;
+    this._merging = true;
+    this.platform.loadCloudSave().then((remoteJson) => {
+      if (this.platform.saveConflicted() || this.platform.cloudLoadFailed()) return; // reload failed: writes stay blocked
+      let remote = null;
+      try { remote = remoteJson ? JSON.parse(remoteJson) : null; } catch { remote = null; }
+      this.progress = mergeProgress(remote && remote.v === 1 ? remote : null, this.progress);
+      this.saveProgress(); // pushes the merge to the cloud slot
+      if (this.screen !== 'play') this.onLanguageChange(); // redraw counts in place
+    }).catch(() => {}).then(() => { this._merging = false; });
+  }
+
+  // The game language changed: redraw whatever is showing, in place. The
+  // round, its clock, the save and the platform connection are untouched;
+  // open dialogs stay open (Settings relabels in place so the shared option
+  // sections mounted inside it survive).
+  onLanguageChange() {
+    const active = document.activeElement;
+    if (this.screen !== 'play') {
+      const modals = [...this.overlay.querySelectorAll(':scope > .modal-wrap')];
+      this.show(this.screen);
+      for (const m of modals) this.overlay.append(m);
+    } else {
+      this.buildTopBar();
+      this.rebuildTray();
+      this.syncBoard();
+      const help = this.overlay.querySelector(':scope > .menu-screen.help');
+      if (help) { help.remove(); this.screenHelp(); }
+    }
+    for (const m of this.liveModals) m.render();
+    for (const g of this.overlay.querySelectorAll('.gfx-settings')) g._relabel?.();
+    if (active && active.isConnected && active !== document.activeElement) active.focus({ preventScroll: true });
   }
 
   syncFromPlatform() {
@@ -138,15 +193,15 @@ export class UI {
     const P = this.platform;
     const status = this.renderStatus();
     if (status) line.append(el('p', 'title-progress', status));
-    if (P.canSignIn()) line.append(this.button(P_STR.signIn, () => P.signIn(), 'btn btn-signin'));
-    if (P.tokenHosted && P.inviteLink()) line.append(this.button(P_STR.invite, () => this.inviteFriend(), 'btn btn-invite'));
+    if (P.canSignIn()) line.append(this.button(N('Sign in with StarHermit'), () => P.signIn(), 'btn btn-signin'));
+    if (P.tokenHosted && P.inviteLink()) line.append(this.button(N('Invite a friend'), () => this.inviteFriend(), 'btn btn-invite'));
   }
 
   inviteFriend() {
     const link = this.platform.inviteLink();
     if (!link) return;
-    const fail = () => this.toast(P_STR.copyFail.replace('{link}', link));
-    try { navigator.clipboard.writeText(link).then(() => this.toast(P_STR.copied), fail); } catch { fail(); }
+    const fail = () => this.toast(T('Could not copy — invite link: {link}', { link }));
+    try { navigator.clipboard.writeText(link).then(() => this.toast(T('Invite link copied to the clipboard.')), fail); } catch { fail(); }
   }
 
   // Account + cloud-sync status shown on the title.
@@ -154,8 +209,8 @@ export class UI {
     const P = this.platform;
     if (!P?.tokenHosted) return null;
     const name = P.profile ? P.profile.name : '…';
-    return P_STR.playing.replace('{name}', name) + ' · ' +
-      (P.sync === 'synced' ? P_STR.synced : P.sync === 'saving' ? P_STR.saving : P_STR.nosync);
+    return T('Playing as {name}', { name }) + ' · ' +
+      T(P.sync === 'synced' ? N('progress synced') : P.sync === 'saving' ? N('saving…') : N('cloud sync unavailable'));
   }
 
   themedSuits() {
@@ -183,12 +238,13 @@ export class UI {
     this.playfield.id = 'playfield';
     this.boardEl = el('div', 'board');
     this.boardEl.setAttribute('role', 'application');
-    this.boardEl.setAttribute('aria-label', 'Eight Webs card table. Use arrow keys to move between cards, Enter to pick up or drop a run, D to deal, H for a hint, U to undo, Escape for pause.');
+    this.boardEl.setAttribute('aria-label', T(N('Eight Webs card table. Use arrow keys to move between cards, Enter to pick up or drop a run, D to deal, H for a hint, U to undo, Escape for pause.')));
+    this.boardEl.dataset.i18nAria = 'Eight Webs card table. Use arrow keys to move between cards, Enter to pick up or drop a run, D to deal, H for a hint, U to undo, Escape for pause.';
     this.boardEl.tabIndex = 0;
     this.playfield.append(this.boardEl);
 
     this.railLeft = el('aside', 'rail rail-left');
-    this.railLeft.innerHTML = '<h2 class="rail-title">Objective</h2>';
+    this.railLeft.append(tx('h2', 'rail-title', 'Objective'));
     this.objectiveEl = el('div', 'objective');
     this.progressEl = el('div', 'progress-rail');
     this.railLeft.append(this.objectiveEl, this.progressEl);
@@ -200,7 +256,8 @@ export class UI {
 
     this.topBar = el('header', 'top-bar');
     this.bottomTray = el('nav', 'bottom-tray');
-    this.bottomTray.setAttribute('aria-label', 'Round actions');
+    this.bottomTray.setAttribute('aria-label', T('Round actions'));
+    this.bottomTray.dataset.i18nAria = 'Round actions';
 
     this.overlay = el('div', 'overlay-host');
     this.live = el('div', 'sr-only');
@@ -219,7 +276,7 @@ export class UI {
   }
 
   caption(text) {
-    this.captionEl.textContent = `♪ ${text}`;
+    this.captionEl.textContent = `♪ ${T(text)}`;
     clearTimeout(this._capT);
     this._capT = setTimeout(() => { this.captionEl.textContent = ''; }, 1600);
   }
@@ -282,21 +339,34 @@ export class UI {
     })[screen]?.();
   }
 
-  modal(titleText, buildBody, { onClose, keep = false } = {}) {
+  // titleText: a translation key (relabelled in place) or a function giving the
+  // display title. live: true re-runs title and buildBody after a language
+  // change; otherwise the body relabels through data-i18n markup.
+  modal(titleText, buildBody, { onClose, keep = false, live = false } = {}) {
     if (!keep) this.overlay.innerHTML = ''; // keep: stack over the current screen
     const wrap = el('div', 'modal-wrap');
     const modal = el('section', 'modal');
     modal.setAttribute('role', 'dialog');
     modal.setAttribute('aria-modal', 'true');
-    const h = el('h2', null, titleText);
+    const h = typeof titleText === 'function' ? el('h2', null, titleText()) : tx('h2', null, titleText);
     modal.append(h);
     const body = el('div', 'modal-body');
     buildBody(body, () => close());
     modal.append(body);
     wrap.append(modal);
     this.overlay.append(wrap);
+    const entry = live ? {
+      render: () => {
+        if (!wrap.isConnected) { this.liveModals.delete(entry); return; }
+        if (typeof titleText === 'function') h.textContent = titleText();
+        body.replaceChildren();
+        buildBody(body, () => close());
+      },
+    } : null;
+    if (entry) this.liveModals.add(entry);
     const prevFocus = document.activeElement;
     const close = () => {
+      if (entry) this.liveModals.delete(entry);
       if (keep) wrap.remove(); else this.overlay.innerHTML = '';
       prevFocus?.focus?.();           // focus restoration after every modal
       onClose?.();
@@ -309,8 +379,9 @@ export class UI {
     return close;
   }
 
+  // label is a translation key (relabelled in place on a language change).
   button(label, onClick, cls = 'btn') {
-    const b = el('button', cls, label);
+    const b = label ? tx('button', cls, label) : el('button', cls, '');
     b.addEventListener('click', (e) => { e.stopPropagation(); this.audio.ensure(); this.audio.event('select'); onClick(); });
     return b;
   }
@@ -323,7 +394,7 @@ export class UI {
     const art = el('img', 'title-art');
     art.src = 'assets/key-art.webp'; art.alt = ''; art.decoding = 'async';
     art.addEventListener('error', () => art.remove()); // decorative: vanish if missing
-    const tag = el('p', 'tagline', 'Weave descending runs of silk thread. Clear all eight webs.');
+    const tag = tx('p', 'tagline', 'Weave descending runs of silk thread. Clear all eight webs.');
     const play = this.button('▶ Play', () => this.show('modes'), 'btn btn-primary btn-big');
     const row = el('div', 'title-row');
     row.append(
@@ -332,13 +403,13 @@ export class UI {
       this.button('Learn', () => this.show('lessons')),
       this.button('Scores', () => this.show('scores')),
       this.button('Help', () => this.show('help')),
-      this.button(gfxStrings().settings, () => this.showSettings()),
+      this.button('Settings', () => this.showSettings()),
     );
     const resume = this.session.hasSnapshot()
       ? this.button('Resume saved round', () => this.resumeSaved(), 'btn btn-accent')
       : null;
     const progress = el('p', 'title-progress',
-      `Journey ${Object.keys(this.progress.journey).length}/${JOURNEY.length} · Webs cleared ${this.progress.websCleared}`);
+      T('Journey {done}/{total} · Webs cleared {webs}', { done: Object.keys(this.progress.journey).length, total: JOURNEY.length, webs: this.progress.websCleared }));
     wrap.append(h1, art, tag, play, row);
     if (resume) wrap.append(resume);
     wrap.append(progress, el('div', 'title-platform'));
@@ -355,19 +426,19 @@ export class UI {
   // --- Mode select -----------------------------------------------------------
   screenModes() {
     const wrap = el('div', 'menu-screen');
-    wrap.append(el('h1', null, 'Choose a mode'));
+    wrap.append(tx('h1', null, 'Choose a mode'));
     const grid = el('div', 'menu-grid');
     const modes = [
-      ['Learn', 'Five short lessons. One rule at a time.', () => this.show('lessons')],
-      ['Journey', 'Forty authored stages across five webs.', () => this.show('journey')],
-      ['Daily', 'One shared seed per UTC day. Ranked.', () => this.startDaily()],
-      ['Practice', 'Pick a difficulty. Unrated, free undo.', () => this.show('practice')],
-      ['Challenge', 'Move budgets, clocks, restricted tools.', () => this.show('challenges')],
-      ['Scores', 'Your history and the boards.', () => this.show('scores')],
+      [N('Learn'), N('Five short lessons. One rule at a time.'), () => this.show('lessons')],
+      [N('Journey'), N('Forty authored stages across five webs.'), () => this.show('journey')],
+      [N('Daily'), N('One shared seed per UTC day. Ranked.'), () => this.startDaily()],
+      [N('Practice'), N('Pick a difficulty. Unrated, free undo.'), () => this.show('practice')],
+      [N('Challenge'), N('Move budgets, clocks, restricted tools.'), () => this.show('challenges')],
+      [N('Scores'), N('Your history and the boards.'), () => this.show('scores')],
     ];
     for (const [name, desc, fn] of modes) {
       const card = this.button('', fn, 'mode-card');
-      card.append(el('strong', null, name), el('span', null, desc));
+      card.append(tx('strong', null, name), tx('span', null, desc));
       grid.append(card);
     }
     wrap.append(grid, this.button('← Back', () => this.show('title')));
@@ -379,11 +450,20 @@ export class UI {
   setupCard(def, onStart) {
     const card = el('div', 'setup-card');
     const durMin = def.limits.timeMs ? Math.round(def.limits.timeMs / 60000) : null;
+    const parts = [
+      T(def.suits > 1 ? N('{n} threads') : N('{n} thread'), { n: def.suits }),
+      durMin ? T('~{n} min clock', { n: durMin }) : T('untimed'),
+    ];
+    if (def.limits.moves) parts.push(T('≤{n} moves', { n: def.limits.moves }));
     card.append(
-      el('strong', null, def.title),
-      el('span', null, `${def.suits} thread${def.suits > 1 ? 's' : ''} · ${durMin ? `~${durMin} min clock` : 'untimed'}${def.limits.moves ? ` · ≤${def.limits.moves} moves` : ''}`),
-      el('span', null, `Assists: ${def.assists.hints ? 'hints' : 'no hints'}, ${def.assists.undo ? 'undo' : 'no undo'} · ${def.ranked ? 'Ranked' : 'Unrated'}`),
-      el('span', 'note', def.goals?.note || ''),
+      el('strong', null, defTitle(def)),
+      el('span', null, parts.join(' · ')),
+      el('span', null, T('Assists: {hints}, {undo} · {ranked}', {
+        hints: T(def.assists.hints ? N('hints') : N('no hints')),
+        undo: T(def.assists.undo ? N('undo') : N('no undo')),
+        ranked: T(def.ranked ? N('Ranked') : N('Unrated')),
+      })),
+      el('span', 'note', def.goals?.note ? T(def.goals.note) : ''),
       this.button('Start', onStart, 'btn btn-primary'),
     );
     return card;
@@ -391,7 +471,7 @@ export class UI {
 
   screenLessons() {
     const wrap = el('div', 'menu-screen');
-    wrap.append(el('h1', null, 'Learn'));
+    wrap.append(tx('h1', null, 'Learn'));
     const list = el('div', 'menu-list');
     LESSONS.forEach((def, i) => {
       const done = this.progress.lessonsDone[def.id];
@@ -405,7 +485,7 @@ export class UI {
 
   screenJourney() {
     const wrap = el('div', 'menu-screen');
-    wrap.append(el('h1', null, 'Journey'));
+    wrap.append(tx('h1', null, 'Journey'));
     const list = el('div', 'menu-list');
     JOURNEY.forEach((def, i) => {
       const done = this.progress.journey[def.id];
@@ -421,7 +501,7 @@ export class UI {
 
   screenChallenges() {
     const wrap = el('div', 'menu-screen');
-    wrap.append(el('h1', null, 'Challenges'));
+    wrap.append(tx('h1', null, 'Challenges'));
     const list = el('div', 'menu-list');
     CHALLENGES.forEach((c) => {
       const def = c.build();
@@ -433,7 +513,7 @@ export class UI {
 
   screenPractice() {
     const wrap = el('div', 'menu-screen');
-    wrap.append(el('h1', null, 'Practice'));
+    wrap.append(tx('h1', null, 'Practice'));
     const list = el('div', 'menu-list');
     PRACTICE_DIFFICULTIES.forEach((d) => {
       const def = practiceDef(d.id);
@@ -441,7 +521,7 @@ export class UI {
     });
     const seedRow = el('div', 'seed-row');
     const input = el('input');
-    input.type = 'text'; input.placeholder = 'Custom seed (shareable)'; input.setAttribute('aria-label', 'Custom seed');
+    input.type = 'text'; input.placeholder = T('Custom seed (shareable)'); input.setAttribute('aria-label', T('Custom seed'));
     seedRow.append(input, this.button('Start seeded', () => {
       const diff = PRACTICE_DIFFICULTIES[0];
       const def = practiceDef(diff.id, input.value.trim() || undefined);
@@ -454,12 +534,15 @@ export class UI {
 
   screenScores() {
     const wrap = el('div', 'menu-screen');
-    wrap.append(el('h1', null, 'Scores & History'));
+    wrap.append(tx('h1', null, 'Scores & History'));
     const list = el('div', 'menu-list');
-    if (!this.history.length) list.append(el('p', null, 'No completed rounds yet.'));
+    if (!this.history.length) list.append(tx('p', null, 'No completed rounds yet.'));
     for (const r of this.history.slice(-10).reverse()) {
       list.append(el('div', 'score-row',
-        `${new Date(r.at).toLocaleDateString()} · ${r.contentId} — ${r.status === 'won' ? 'Won' : 'Lost'} · score ${r.score.total} (base ${r.score.base}, moves ${r.score.movePenalty}, webs +${r.score.runs}, time +${r.score.time}, no-undo +${r.score.noUndo})`));
+        `${new Date(r.at).toLocaleDateString(getLang())} · ${r.contentId} — ${T(r.status === 'won' ? N('Won') : N('Lost'))} · ` +
+        T('score {total} (base {base}, moves {moves}, webs +{webs}, time +{time}, no-undo +{noUndo})', {
+          total: r.score.total, base: r.score.base, moves: r.score.movePenalty, webs: r.score.runs, time: r.score.time, noUndo: r.score.noUndo,
+        })));
     }
     const lb = el('div', 'menu-list');
     wrap.append(list, lb, this.button('← Back', () => this.show('modes')));
@@ -468,24 +551,27 @@ export class UI {
     const day = new Date(this.platform.serverNow()).toISOString().slice(0, 10);
     const today = this.history.filter((r) => r.contentId === `daily-${day}` && r.status === 'won')
       .sort((a, b) => b.score.total - a.score.total);
-    lb.append(el('h2', null, `Daily board — ${day} (this device)`));
-    if (!today.length) lb.append(el('p', 'dim', 'No daily wins yet today.'));
+    lb.append(el('h2', null, T('Daily board — {day} (this device)', { day })));
+    if (!today.length) lb.append(tx('p', 'dim', 'No daily wins yet today.'));
     today.slice(0, 10).forEach((r, i) => {
-      lb.append(el('div', 'score-row', `#${i + 1} — score ${r.score.total} · webs ${r.foundations} · ${r.moves} moves`));
+      lb.append(el('div', 'score-row', T('#{n} — score {total} · webs {webs} · {moves} moves', { n: i + 1, total: r.score.total, webs: r.foundations, moves: r.moves })));
     });
   }
 
   screenHelp() {
     const wrap = el('div', 'menu-screen help');
-    wrap.append(el('h1', null, 'How to play'));
+    wrap.append(tx('h1', null, 'How to play'));
     const cards = el('div', 'help-grid');
     const entries = [
-      ['Build down', 'A card (or a whole same-thread descending run) rests on a card exactly one rank higher.'],
-      ['Threads travel together', 'Only same-suit descending runs move as a group. Mixed stacks move one card at a time from the top.'],
-      ['Clear webs', 'A complete King-to-Ace run of one thread lifts off the table. Clear eight webs to win.'],
-      ['The stock', 'Deal adds one face-up card to every column — only when no column is empty. Five deals per round.'],
-      ['Empty columns', 'Any run may rest in an empty column. They are your work space.'],
-      ['Controls', `Tap or click a card to lift its run, then tap a destination. Keyboard: ${['left', 'right', 'up', 'down'].map((a) => this.keyLabel(a)).join('/')} move focus, ${this.keyLabel('confirm')} lifts/drops, ${this.keyLabel('deal')} deals, ${this.keyLabel('hint')} hints, ${this.keyLabel('undo')} undoes, ${this.keyLabel('pause')} pauses.`],
+      [T('Build down'), T('A card (or a whole same-thread descending run) rests on a card exactly one rank higher.')],
+      [T('Threads travel together'), T('Only same-suit descending runs move as a group. Mixed stacks move one card at a time from the top.')],
+      [T('Clear webs'), T('A complete King-to-Ace run of one thread lifts off the table. Clear eight webs to win.')],
+      [T('The stock'), T('Deal adds one face-up card to every column — only when no column is empty. Five deals per round.')],
+      [T('Empty columns'), T('Any run may rest in an empty column. They are your work space.')],
+      [T('Controls'), T('Tap or click a card to lift its run, then tap a destination. Keyboard: {move} move focus, {confirm} lifts/drops, {deal} deals, {hint} hints, {undo} undoes, {pause} pauses.', {
+        move: ['left', 'right', 'up', 'down'].map((a) => this.keyLabel(a)).join('/'), confirm: this.keyLabel('confirm'), deal: this.keyLabel('deal'),
+        hint: this.keyLabel('hint'), undo: this.keyLabel('undo'), pause: this.keyLabel('pause'),
+      })],
     ];
     for (const [t, d] of entries) {
       const c = el('div', 'help-card');
@@ -523,7 +609,7 @@ export class UI {
       if (n <= 0) {
         this.overlay.innerHTML = '';
         this.session.beginActive();
-        this.announce('Round started. ' + this.objectiveText());
+        this.announce(T('Round started.') + ' ' + this.objectiveText());
         this.syncBoard();
         return;
       }
@@ -537,8 +623,8 @@ export class UI {
   showLessonStep() {
     const step = this.session.currentLessonStep();
     if (step) {
-      this.announce(step.text);
-      this.toast(step.text);
+      this.announce(T(step.text));
+      this.toast(T(step.text));
     }
   }
 
@@ -557,17 +643,23 @@ export class UI {
   // --- Play screen -------------------------------------------------------------
   screenPlay() {
     this.overlay.innerHTML = '';
-    this.topBar.innerHTML = '';
-    const def = this.session.def;
-    const title = el('span', 'top-title', def?.title || '');
-    this.clockEl = el('span', 'top-clock', '');
-    this.topBar.append(
-      this.button('☰', () => this.showPause(), 'btn icon-btn'),
-      title, this.clockEl,
-    );
+    this.buildTopBar();
     this.rebuildTray();
     this.syncBoard();
     this.boardEl.focus();
+  }
+
+  buildTopBar() {
+    this.topBar.innerHTML = '';
+    const def = this.session.def;
+    const title = el('span', 'top-title', def ? defTitle(def) : '');
+    this.clockEl = el('span', 'top-clock', '');
+    const menu = el('button', 'btn icon-btn', '☰');
+    menu.setAttribute('aria-label', T('Pause menu'));
+    menu.dataset.i18nAria = 'Pause menu';
+    menu.addEventListener('click', (e) => { e.stopPropagation(); this.audio.ensure(); this.audio.event('select'); this.showPause(); });
+    this.topBar.append(menu, title, this.clockEl);
+    if (this.session.state) this.updateClock();
   }
 
   rebuildTray() {
@@ -584,7 +676,7 @@ export class UI {
   objectiveText() {
     const st = this.session.state;
     if (!st) return '';
-    return `Clear ${st.webGoal} web${st.webGoal > 1 ? 's' : ''}. ${st.foundations}/${st.webGoal} done.`;
+    return T(st.webGoal > 1 ? N('Clear {goal} webs. {done}/{goal} done.') : N('Clear {goal} web. {done}/{goal} done.'), { goal: st.webGoal, done: st.foundations });
   }
 
   syncRails() {
@@ -593,15 +685,19 @@ export class UI {
     this.objectiveEl.innerHTML = '';
     this.objectiveEl.append(
       el('p', null, this.objectiveText()),
-      el('p', 'dim', `${faceDownCount(st)} cards hidden · stock deals left: ${st.stock.length}`),
+      el('p', 'dim', T('{hidden} cards hidden · stock deals left: {deals}', { hidden: faceDownCount(st), deals: st.stock.length })),
     );
     this.progressEl.innerHTML = '';
     const s = st.score;
     this.progressEl.append(el('p', null,
-      `Score ${s.total}  (base ${s.base} − moves ${-s.movePenalty} + webs ${s.runs} + time ${s.time} + no-undo ${s.noUndo})`));
-    this.progressEl.append(el('p', 'dim', `Moves ${st.moves}${st.limits.moves ? '/' + st.limits.moves : ''} · Invalid ${st.invalid}`));
+      T('Score {total}  (base {base} − moves {moves} + webs {webs} + time {time} + no-undo {noUndo})', {
+        total: s.total, base: s.base, moves: -s.movePenalty, webs: s.runs, time: s.time, noUndo: s.noUndo,
+      })));
+    this.progressEl.append(el('p', 'dim', T('Moves {moves} · Invalid {invalid}', {
+      moves: `${st.moves}${st.limits.moves ? '/' + st.limits.moves : ''}`, invalid: st.invalid,
+    })));
     this.statusEl.innerHTML = '';
-    this.statusEl.append(el('p', null, st.status === 'active' ? 'Your move' : st.status.toUpperCase()));
+    this.statusEl.append(el('p', null, st.status === 'active' ? T('Your move') : T(STATUS_TEXT[st.status] || st.status.toUpperCase())));
   }
 
   // --- Board rendering (DOM mirror of the 3D scene) ----------------------------
@@ -623,7 +719,13 @@ export class UI {
     st.stock.forEach((_, i) => {
       const b = el('button', 'stock-packet');
       Object.assign(b.style, posStyle(L.stock[i]));
-      b.setAttribute('aria-label', `Stock packet ${i + 1}. Deal one card to every column.`);
+      b.setAttribute('aria-label', T('Stock packet {n}. Deal one card to every column.', { n: i + 1 }));
+      if (i === st.stock.length - 1) { // only the top packet carries the label
+        const label = T('deal');
+        b.dataset.label = label;
+        // Too narrow for the word (small screens, long translations): set it beside the pile.
+        b.classList.toggle('label-out', label.length * 9.5 > L.stock[i].w - 6);
+      }
       b.addEventListener('click', () => this.doDeal());
       this.boardEl.append(b);
     });
@@ -632,7 +734,7 @@ export class UI {
       const f = el('div', 'foundation filled');
       Object.assign(f.style, posStyle(L.foundations[i]));
       f.textContent = '🕸';
-      f.setAttribute('aria-label', `Web ${i + 1} complete`);
+      f.setAttribute('aria-label', T('Web {n} complete', { n: i + 1 }));
       this.boardEl.append(f);
     }
     // Column pads (empty-column drop targets)
@@ -641,7 +743,7 @@ export class UI {
       const pad = el('button', 'col-pad');
       Object.assign(pad.style, { left: p.x + 'px', top: p.y + 'px', width: p.w + 'px', height: p.h + 'px' });
       pad.dataset.col = c;
-      pad.setAttribute('aria-label', `Column ${c + 1} (empty)`);
+      pad.setAttribute('aria-label', T('Column {n} (empty)', { n: c + 1 }));
       pad.addEventListener('click', () => this.tapPad(c));
       this.boardEl.append(pad);
     });
@@ -660,11 +762,11 @@ export class UI {
           b.innerHTML = `<span class="rank">${rankLabel(cd.r)}</span><span class="glyph" aria-hidden="true">${suit.glyph}</span>`;
           const runLen = col.length - i;
           b.setAttribute('aria-label',
-            `Column ${c + 1}: ${rankLabel(cd.r)} of ${suit.name}` +
-            (runLen > 1 ? `, run of ${runLen}` : ''));
+            T('Column {n}: {rank} of {suit}', { n: c + 1, rank: rankLabel(cd.r), suit: T(suit.name) }) +
+            (runLen > 1 ? T(', run of {n}', { n: runLen }) : ''));
         } else {
           b.classList.add('face-down');
-          b.setAttribute('aria-label', `Column ${c + 1}: face-down card`);
+          b.setAttribute('aria-label', T('Column {n}: face-down card', { n: c + 1 }));
           b.disabled = true;
         }
         if (this.session.selection && this.session.selection.from === c && i >= this.session.selection.idx) {
@@ -689,7 +791,7 @@ export class UI {
     this.renderer.setSelection(this.session.selection, this.session.selection ? this.session.legalTargets() : [], this.hintMove);
     if (this.btnDeal) {
       this.btnDeal.disabled = st.stock.length === 0;
-      this.btnDeal.title = st.stock.length === 0 ? 'The stock is empty' : '';
+      this.btnDeal.title = st.stock.length === 0 ? T('The stock is empty') : '';
     }
     this.updateClock();
   }
@@ -863,7 +965,7 @@ export class UI {
 
   doUndo() {
     const r = this.session.undo();
-    if (!r.error) { this.audio.event('undo'); this.announce('Move undone.'); this.syncBoard(); }
+    if (!r.error) { this.audio.event('undo'); this.announce(T('Move undone.')); this.syncBoard(); }
   }
 
   doHint() {
@@ -872,12 +974,14 @@ export class UI {
       this.hintMove = h;
       this.audio.event('hint');
       const suit = this.suits[this.session.state.cols[h.from][h.idx].s];
-      this.announce(`Hint: move the ${rankLabel(this.session.state.cols[h.from][h.idx].r)} of ${suit.name} from column ${h.from + 1} to column ${h.to + 1}.`);
+      this.announce(T('Hint: move the {rank} of {suit} from column {from} to column {to}.', {
+        rank: rankLabel(this.session.state.cols[h.from][h.idx].r), suit: T(suit.name), from: h.from + 1, to: h.to + 1,
+      }));
       this.syncBoard();
       setTimeout(() => { this.hintMove = null; if (this.screen === 'play') this.syncBoard(); }, 3500);
     } else if (h?.none) {
-      this.announce(h.canDeal ? 'No moves — deal from the stock.' : 'No legal moves remain.');
-      this.toast(h.canDeal ? 'No moves available — deal from the stock.' : 'No legal moves remain.');
+      this.announce(T(h.canDeal ? N('No moves — deal from the stock.') : N('No legal moves remain.')));
+      this.toast(T(h.canDeal ? N('No moves available — deal from the stock.') : N('No legal moves remain.')));
     } else if (h?.error) {
       this.toast(reasonText(h.error), 2500);
     }
@@ -905,7 +1009,7 @@ export class UI {
         if (left < 60000 && left > 0 && !this._timeWarned && st.status === 'active' && this.session.machine === 'active') {
           this._timeWarned = true; // one-shot per round
           this.audio.event('time-warning');
-          this.announce('One minute left.');
+          this.announce(T('One minute left.'));
         }
         if (left <= 0 && st.status === 'active' && this.session.machine === 'active') {
           // The clock expired between inputs: route a heartbeat through the
@@ -928,7 +1032,7 @@ export class UI {
     this.modal('Paused', (body, close) => {
       const resume = this.button('Resume', () => { close(); this.session.resume(); this.syncBoard(); }, 'btn btn-primary btn-big');
       body.append(resume);
-      if (restored) body.append(el('p', 'dim', 'Round restored from your last safe snapshot.'));
+      if (restored) body.append(tx('p', 'dim', 'Round restored from your last safe snapshot.'));
       body.append(
         this.settingsSection(),
         this.button('Help', () => { close(); this.screenHelp(); }),
@@ -943,10 +1047,10 @@ export class UI {
   settingsSection() {
     const s = this.settings;
     const wrap = el('fieldset', 'settings');
-    wrap.append(el('legend', null, 'Settings'));
+    wrap.append(tx('legend', null, 'Settings'));
     const row = (label, input) => {
       const l = el('label', 'setting-row');
-      const sp = el('span', null, label);
+      const sp = tx('span', null, label);
       l.append(sp, input);
       wrap.append(l);
       return input;
@@ -966,53 +1070,56 @@ export class UI {
     const select = (label, key, options, cb) => {
       const sel = el('select');
       for (const [v, name] of options) {
-        const o = el('option', null, name); o.value = v; sel.append(o);
+        const o = tx('option', null, name); o.value = v; sel.append(o);
       }
       sel.value = s[key];
       sel.addEventListener('change', () => { s[key] = sel.value; this.applySettings(); cb?.(); });
       row(label, sel);
     };
-    slider('Music volume', 'volMusic');
-    slider('Effects volume', 'volEffects');
-    slider('Ambience volume', 'volAmbience');
-    slider('Voice volume', 'volVoice');
-    toggle('Mute all', 'muted');
-    select('Theme', 'theme', THEMES.map((t) => [t.id, t.name]), () => this.syncBoard());
-    select('Color-vision palette', 'cvd', [['none', 'Default'], ['deuter', 'Deuteranopia-safe'], ['protan', 'Protanopia-safe'], ['tritan', 'Tritanopia-safe']], () => this.syncBoard());
-    toggle('Reduced motion', 'reducedMotion');
-    toggle('High contrast', 'highContrast');
-    toggle('Larger text', 'largeText');
-    toggle('Left-handed controls', 'leftHanded');
-    toggle('Hold to drag (vs tap)', 'holdToDrag');
-    toggle('Haptics', 'haptics');
+    slider(N('Music volume'), 'volMusic');
+    slider(N('Effects volume'), 'volEffects');
+    slider(N('Ambience volume'), 'volAmbience');
+    slider(N('Voice volume'), 'volVoice');
+    toggle(N('Mute all'), 'muted');
+    select(N('Theme'), 'theme', THEMES.map((t) => [t.id, t.name]), () => this.syncBoard());
+    select(N('Color-vision palette'), 'cvd', [['none', N('Default')], ['deuter', N('Deuteranopia-safe')], ['protan', N('Protanopia-safe')], ['tritan', N('Tritanopia-safe')]], () => this.syncBoard());
+    toggle(N('Reduced motion'), 'reducedMotion');
+    toggle(N('High contrast'), 'highContrast');
+    toggle(N('Larger text'), 'largeText');
+    toggle(N('Left-handed controls'), 'leftHanded');
+    toggle(N('Hold to drag (vs tap)'), 'holdToDrag');
+    toggle(N('Haptics'), 'haptics');
     wrap.append(this.graphicsSection());
     return wrap;
   }
 
   // Settings from the title screen (in a round, the pause modal holds them).
   showSettings() {
-    const T = gfxStrings();
-    this.modal(T.settings, (body, close) => {
-      body.append(this.settingsSection(), this.button(T.close, () => close(), 'btn btn-primary'));
+    this.modal(N('Settings'), (body, close) => {
+      body.append(this.settingsSection(), this.button(N('Close'), () => close(), 'btn btn-primary'));
     }, { keep: true });
   }
 
   // Graphics: quality preset, render scale, per-effect overrides, adaptive
   // resolution, frame-rate readout and a cost summary. Applies live.
   graphicsSection() {
-    const T = gfxStrings();
+    let G = gfxStrings();
     const s = this.settings;
     const wrap = el('fieldset', 'settings gfx-settings');
     wrap.id = 'gfx-section';
-    wrap.append(el('legend', null, T.graphics));
-    const tierName = (t) => T.tiers[t] || T.presets[t] || t;
+    const legend = el('legend', null, G.graphics);
+    wrap.append(legend);
+    const tierName = (t) => G.tiers[t] || G.presets[t] || t;
     const info = () => this.renderer?.graphicsInfo?.() || {
       ok: false, gpu: '', detected: 'balanced', resolved: resolveGfx(s.graphics, 'balanced'), summary: '', postFailed: false,
     };
+    const labels = []; // [span, () => text] relabelled on a language change
     const row = (label, control, id) => {
       const l = el('label', 'setting-row');
       l.htmlFor = id;
-      l.append(el('span', null, label), control);
+      const span = el('span', null, label());
+      labels.push([span, label]);
+      l.append(span, control);
       wrap.append(l);
     };
     const commit = () => {
@@ -1025,9 +1132,9 @@ export class UI {
     const preset = el('select');
     preset.id = 'gfx-preset'; preset.dataset.gfx = 'preset';
     const autoOpt = opt(preset, 'auto', '');
-    for (const p of PRESETS) opt(preset, p, T.presets[p]);
+    const presetOpts = PRESETS.map((p) => opt(preset, p, G.presets[p]));
     preset.addEventListener('change', () => { s.graphics = choosePreset(s.graphics, preset.value); commit(); });
-    row(T.quality, preset, 'gfx-preset');
+    row(() => G.quality, preset, 'gfx-preset');
 
     const scaleBox = el('span', 'gfx-range');
     const scale = el('input');
@@ -1041,14 +1148,14 @@ export class UI {
       scaleOut.textContent = `${scale.value}%`;
       commit();
     });
-    row(T.renderScale, scaleBox, 'gfx-scale');
+    row(() => G.renderScale, scaleBox, 'gfx-scale');
 
     const catSel = {};
     for (const [cat, tiers] of Object.entries(CATEGORIES)) {
       const sel = el('select');
       sel.id = `gfx-${cat}`; sel.dataset.gfx = cat;
       opt(sel, 'preset', '');
-      for (const t of tiers) opt(sel, t, tierName(t));
+      for (const t of tiers) opt(sel, t, tierName(t)).dataset.tier = t;
       sel.addEventListener('change', () => {
         const g = { ...s.graphics };
         if (sel.value === 'preset') delete g[cat]; else g[cat] = sel.value;
@@ -1056,7 +1163,7 @@ export class UI {
         commit();
       });
       catSel[cat] = sel;
-      row(T.cats[cat] || cat, sel, sel.id);
+      row(() => G.cats[cat] || cat, sel, sel.id);
     }
 
     const check = (label, key, id, def) => {
@@ -1067,8 +1174,8 @@ export class UI {
       row(label, i, id);
       return i;
     };
-    const adaptive = check(T.adaptive, 'adaptive', 'gfx-adaptive', true);
-    const fps = check(T.showFps, 'show_fps', 'gfx-fps', false);
+    const adaptive = check(() => G.adaptive, 'adaptive', 'gfx-adaptive', true);
+    const fps = check(() => G.showFps, 'show_fps', 'gfx-fps', false);
 
     const summary = el('p', 'dim gfx-summary');
     summary.id = 'gfx-summary';
@@ -1080,22 +1187,34 @@ export class UI {
     const refresh = () => {
       const i = info();
       const q = i.resolved;
-      autoOpt.textContent = fmt(T.auto, { tier: T.presets[i.detected] || i.detected });
+      autoOpt.textContent = fmt(G.auto, { tier: G.presets[i.detected] || i.detected });
       preset.value = PRESETS.includes(s.graphics.preset) ? s.graphics.preset : 'auto';
       const pct = Math.round((Number(s.graphics.render_scale) || 1) * 100);
       scale.value = pct; scaleOut.textContent = `${pct}%`;
       for (const [cat, sel] of Object.entries(catSel)) {
-        sel.options[0].textContent = fmt(T.fromPreset, { tier: tierName(presetTier(q.preset, cat)) });
+        sel.options[0].textContent = fmt(G.fromPreset, { tier: tierName(presetTier(q.preset, cat)) });
         sel.value = CATEGORIES[cat].includes(s.graphics[cat]) ? s.graphics[cat] : 'preset';
       }
       adaptive.checked = s.graphics.adaptive !== false;
       fps.checked = !!s.graphics.show_fps;
-      summary.textContent = [i.gpu, i.summary].filter(Boolean).join(' · ');
-      const msg = !i.ok ? T.noWebgl : i.postFailed ? T.postFailed : '';
+      const gpu = i.gpu === 'unknown GPU' ? T('unknown GPU') : i.gpu;
+      const cost = i.resolved ? describeGfx(i.resolved, i.pixels || null, T) : i.summary;
+      summary.textContent = [gpu, cost].filter(Boolean).join(' · ');
+      const msg = !i.ok ? G.noWebgl : i.postFailed ? G.postFailed : '';
       note.textContent = msg;
       note.hidden = !msg;
     };
     refresh();
+    // Language change: swap the strings in place (the shared option sections
+    // that game-options.js mounts inside this fieldset stay put).
+    wrap._relabel = () => {
+      G = gfxStrings();
+      legend.textContent = G.graphics;
+      for (const [span, label] of labels) span.textContent = label();
+      presetOpts.forEach((o, k) => { o.textContent = G.presets[PRESETS[k]]; });
+      for (const sel of Object.values(catSel)) for (const o of sel.options) if (o.dataset.tier) o.textContent = tierName(o.dataset.tier);
+      refresh();
+    };
     return wrap;
   }
 
@@ -1109,11 +1228,11 @@ export class UI {
         else if (ev.type === 'deal') this.audio.event('deal');
         else if (ev.type === 'run-complete') {
           this.audio.event('run-complete');
-          this.announce(`Web complete! ${e.state.foundations} of ${e.state.webGoal}.`);
+          this.announce(T('Web complete! {done} of {goal}.', { done: e.state.foundations, goal: e.state.webGoal }));
         } else if (ev.type === 'invalid') {
           this.audio.event('invalid');
-          this.announce(`Not legal: ${reasonText(ev.reason)}.`);
-          this.toast(`Not legal: ${reasonText(ev.reason)}.`, 2500);
+          this.announce(T('Not legal: {reason}.', { reason: reasonText(ev.reason) }));
+          this.toast(T('Not legal: {reason}.', { reason: reasonText(ev.reason) }), 2500);
         } else if (ev.type === 'win') this.audio.event('win');
         else if (ev.type === 'lose') this.audio.event('lose');
         this.renderer?.eventFx(ev);
@@ -1121,18 +1240,25 @@ export class UI {
       }
       case 'invalid': {
         this.audio.event('invalid');
-        this.toast(`Not legal: ${reasonText(e.reason)}.`, 2500);
-        this.announce(`Not legal: ${reasonText(e.reason)}.`);
+        this.toast(T('Not legal: {reason}.', { reason: reasonText(e.reason) }), 2500);
+        this.announce(T('Not legal: {reason}.', { reason: reasonText(e.reason) }));
         break;
       }
       case 'select': this.syncBoard(); break;
       case 'lesson-step': {
-        if (e.step) { this.audio.event('lesson-step'); this.toast(e.step.text, 6000); this.announce(e.step.text); }
-        else this.toast('Lesson complete when the web clears!', 3000);
+        if (e.step) { this.audio.event('lesson-step'); this.toast(T(e.step.text), 6000); this.announce(T(e.step.text)); }
+        else this.toast(T('Lesson complete when the web clears!'), 3000);
         break;
       }
-      case 'lesson-blocked': this.toast(e.message, 3000); this.announce(e.message); break;
-      case 'while-away': this.toast(e.summary, 6000); this.announce(e.summary); break;
+      case 'lesson-blocked': {
+        const msg = e.stepText ? T('Follow the lesson: {step}', { step: T(e.stepText) }) : e.message;
+        this.toast(msg, 3000); this.announce(msg); break;
+      }
+      case 'while-away': {
+        const a = e.away;
+        const msg = a ? T('Round restored. You were away {min} min; {webs}/{goal} webs cleared, score {score}.', a) : e.summary;
+        this.toast(msg, 6000); this.announce(msg); break;
+      }
       case 'round-end': this.onRoundEnd(); break;
     }
   }
@@ -1167,7 +1293,9 @@ export class UI {
     this.saveProgress();
     this.platform.saveLocal(HISTORY_KEY, this.history);
 
-    const headline = won ? '🕸 All webs cleared!' : st.status === 'aborted' ? 'Round abandoned' : 'The weave holds…';
+    const headlineKey = won ? N('All webs cleared!') : st.status === 'aborted' ? N('Round abandoned') : N('The weave holds…');
+    const headline = () => (won ? '🕸 ' : '') + T(headlineKey);
+    this.postToLeaderboard(def, st);
     this.modal(headline, (body, close) => {
       const s = st.score;
       const art = el('img', 'results-art');
@@ -1177,23 +1305,27 @@ export class UI {
       body.append(art);
       const table = el('dl', 'score-breakdown');
       const rows = [
-        ['Base', s.base], ['Moves', s.movePenalty], ['Webs', `+${s.runs}`],
-        ['Time bonus', `+${s.time}`], ['No-undo bonus', `+${s.noUndo}`], ['Total', s.total],
+        [N('Base'), s.base], [N('Moves'), s.movePenalty], [N('Webs'), `+${s.runs}`],
+        [N('Time bonus'), `+${s.time}`], [N('No-undo bonus'), `+${s.noUndo}`], [N('Total'), s.total],
       ];
-      for (const [k, v] of rows) { table.append(el('dt', null, k), el('dd', null, String(v))); }
+      for (const [k, v] of rows) { table.append(el('dt', null, T(k)), el('dd', null, String(v))); }
       body.append(table);
-      body.append(el('p', 'dim', `${st.moves} moves · ${st.invalid} invalid · ${Math.floor(st.elapsedMs / 60000)}:${String(Math.floor(st.elapsedMs / 1000) % 60).padStart(2, '0')} · ${st.terminalReason || ''}`));
-      const lb = this.postToLeaderboard(def, st);
-      if (lb) body.append(lb);
+      const clock = `${Math.floor(st.elapsedMs / 60000)}:${String(Math.floor(st.elapsedMs / 1000) % 60).padStart(2, '0')}`;
+      body.append(el('p', 'dim', T('{moves} moves · {invalid} invalid · {time}', { moves: st.moves, invalid: st.invalid, time: clock }) +
+        (st.terminalReason ? ' · ' + T(TERMINAL_TEXT[st.terminalReason] || st.terminalReason) : '')));
+      if (this._lb) {
+        const line = el('p', 'dim results-lb', this.lbText());
+        line.id = 'results-lb';
+        line.setAttribute('role', 'status');
+        body.append(line);
+      }
       if (newly.length) {
         const ach = el('div', 'achievements');
         for (const k of newly) {
           const a = ACHIEVEMENTS.find((x) => x.key === k);
-          ach.append(el('p', 'achievement', `🏅 ${a?.name || k} — ${a?.desc || ''}`));
+          ach.append(el('p', 'achievement', `🏅 ${a ? T(a.name) : k} — ${a ? T(a.desc) : ''}`));
         }
         body.append(ach);
-        setTimeout(() => this.audio.event('achievement'), 700); // after the win/lose sting
-        this.announce(`Achievement unlocked: ${newly.join(', ')}`);
       }
       const next = this.nextRecommended();
       body.append(
@@ -1201,22 +1333,38 @@ export class UI {
         this.button(next.label, () => { close(); next.fn(); }),
         this.button('Title', () => { close(); this.show('title'); }),
       );
-      this.announce(`${headline} Final score ${s.total}.`);
-    });
+    }, { live: true });
+    if (newly.length) {
+      setTimeout(() => this.audio.event('achievement'), 700); // after the win/lose sting
+      this.announce(T('Achievement unlocked: {names}', {
+        names: newly.map((k) => { const a = ACHIEVEMENTS.find((x) => x.key === k); return a ? T(a.name) : k; }).join(', '),
+      }));
+    }
+    this.announce(T('{headline} Final score {total}.', { headline: T(headlineKey), total: st.score.total }));
   }
 
   // Signed-in ranked rounds that finished (won or lost, not given up): post the
   // total to the StarHermit high-score board and show the player's rank there.
+  // The line's state is kept so a language change can re-render it.
   postToLeaderboard(def, st) {
-    if (!def.ranked || st.status === 'aborted' || !this.platform.tokenHosted) return null;
-    const line = el('p', 'dim results-lb', P_STR.lbPosting);
-    line.id = 'results-lb';
-    line.setAttribute('role', 'status');
+    const seq = (this._lbSeq = (this._lbSeq || 0) + 1);
+    this._lb = null;
+    if (!def.ranked || st.status === 'aborted' || !this.platform.tokenHosted) return;
+    this._lb = { status: 'posting', rank: null };
     this.platform.submitScore(st.score.total).then((r) => {
-      line.textContent = !r.posted ? P_STR.lbNotPosted
-        : r.rank ? fmt(P_STR.lbRank, { rank: r.rank }) : P_STR.lbPosted;
+      if (seq !== this._lbSeq) return;
+      this._lb = { status: r.posted ? 'posted' : 'not-posted', rank: r.rank || null };
+      const line = this.overlay.querySelector('#results-lb');
+      if (line) line.textContent = this.lbText();
     });
-    return line;
+  }
+
+  lbText() {
+    const lb = this._lb;
+    if (!lb) return '';
+    if (lb.status === 'posting') return T('Posting score to the leaderboard…');
+    if (lb.status === 'not-posted') return T('Score not posted to the leaderboard.');
+    return lb.rank ? T('Leaderboard rank: #{rank}', { rank: lb.rank }) : T('Score posted to the leaderboard.');
   }
 
   nextRecommended() {
@@ -1224,16 +1372,16 @@ export class UI {
     if (def.mode === 'journey') {
       const idx = JOURNEY.findIndex((j) => j.id === def.id);
       if (idx >= 0 && idx + 1 < JOURNEY.length) {
-        return { label: 'Next stage', fn: () => this.startRound(JOURNEY[idx + 1]) };
+        return { label: N('Next stage'), fn: () => this.startRound(JOURNEY[idx + 1]) };
       }
     }
     if (def.mode === 'learn') {
       const idx = LESSONS.findIndex((l) => l.id === def.id);
       if (idx >= 0 && idx + 1 < LESSONS.length) {
-        return { label: 'Next lesson', fn: () => this.startRound(LESSONS[idx + 1]) };
+        return { label: N('Next lesson'), fn: () => this.startRound(LESSONS[idx + 1]) };
       }
     }
-    return { label: 'Journey', fn: () => this.show('journey') };
+    return { label: N('Journey'), fn: () => this.show('journey') };
   }
 }
 
@@ -1241,16 +1389,17 @@ function posStyle(r) {
   return { left: r.x + 'px', top: r.y + 'px', width: r.w + 'px', height: r.h + 'px' };
 }
 
+const REASON_TEXT = {
+  'same-column': N('that is the same column'),
+  'face-down': N('that card is face-down'),
+  'broken-run': N('only same-thread descending runs travel together'),
+  'rank-mismatch': N('a run rests only on the next rank up'),
+  'empty-column': N('you cannot deal while a column is empty'),
+  'round-over': N('the round is over'),
+  'out-of-bounds': N('off the table'),
+  'stock-empty': N('the stock is empty'),
+  'hints-disabled': N('hints are disabled for this round'),
+};
 export function reasonText(reason) {
-  return {
-    'same-column': 'that is the same column',
-    'face-down': 'that card is face-down',
-    'broken-run': 'only same-thread descending runs travel together',
-    'rank-mismatch': 'a run rests only on the next rank up',
-    'empty-column': 'you cannot deal while a column is empty',
-    'round-over': 'the round is over',
-    'out-of-bounds': 'off the table',
-    'stock-empty': 'the stock is empty',
-    'hints-disabled': 'hints are disabled for this round',
-  }[reason] || reason;
+  return REASON_TEXT[reason] ? T(REASON_TEXT[reason]) : reason;
 }

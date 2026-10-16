@@ -72,7 +72,8 @@ async function platformPass(ctxOpts, tag) {
   const context = await browser.newContext(ctxOpts);
   const page = await context.newPage();
   page.setDefaultTimeout(15000);
-  const errors = [], seen = [];
+  const errors = [], seen = [], bodies = {};
+  let prefLang = null;
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
   page.on('console', (m) => {
     if (m.type() !== 'error' && m.type() !== 'warning') return;
@@ -87,8 +88,13 @@ async function platformPass(ctxOpts, tag) {
   await page.route((url) => PLATFORM_API.test(url.pathname), (route) => {
     const req = route.request(), u = new URL(req.url());
     seen.push(req.method() + ' ' + u.pathname);
-    const json = (o) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(o) });
+    if (req.method() !== 'GET') bodies[req.method() + ' ' + u.pathname] = req.postData();
+    const json = (o, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(o) });
     if (u.pathname.endsWith('/profile')) return json({ nickname: 'Pip Tester' });
+    if (u.pathname === '/api/v1/me/language') return json({ preferredLanguage: prefLang });
+    if (u.pathname.includes('/cloud-saves/') && req.method() === 'PUT') return json({ etag: '"v' + seen.length + '"' });
+    if (/\/settings\/ui\.language$/.test(u.pathname) && req.method() === 'PUT') return json({ key: 'ui.language' });
+    if (u.pathname.endsWith('/reports') && req.method() === 'POST') return json({ id: 'r1', kind: 'bug', status: 'open', createdAt: new Date().toISOString() }, 201);
     if (u.pathname.endsWith('/settings') && req.method() === 'GET') return json({ settings: { highContrast: true } });
     if (u.pathname.endsWith('/controls')) return json({ actions: [{ action: 'hint', codes: ['KeyJ'] }] });
     return route.fulfill({ status: 204 });
@@ -120,6 +126,75 @@ async function platformPass(ctxOpts, tag) {
       await help.scrollIntoViewIfNeeded();
       await click(help);
       await page.waitForFunction(() => /J hints/.test(document.body.textContent), null, { timeout: 3000 });
+    });
+    await step(`[${tag}] language: Automatic follows the account (fr-CA); Deutsch re-renders and saves ui.language; report a problem`, async () => {
+      prefLang = 'fr-CA';
+      await page.goto('about:blank');
+      await page.goto(`${BASE}/#game_token=${jwt}`, { waitUntil: 'load' });
+      await page.waitForFunction(() => document.documentElement.lang === 'fr-CA', null, { timeout: 8000 });
+      await page.waitForFunction(() => document.querySelector('.title-screen .btn-primary')?.textContent === '▶ Jouer', null, { timeout: 5000 });
+      const settingsBtn = page.locator('.title-row .btn', { hasText: 'Paramètres' });
+      await settingsBtn.scrollIntoViewIfNeeded();
+      await click(settingsBtn);
+      const choice = page.locator('[data-game-language="choice"]');
+      await choice.waitFor({ timeout: 5000 });
+      await choice.scrollIntoViewIfNeeded();
+      const auto = await choice.locator('option').first().textContent();
+      if (auto !== 'Automatique — Français (Canada)') throw new Error('Automatic label: ' + auto);
+      await choice.selectOption('de-DE');
+      await page.waitForFunction(() => document.documentElement.lang === 'de-DE');
+      await page.waitForFunction(() => /Im Konto gespeichert/.test(document.querySelector('[data-game-language="status"]').textContent), null, { timeout: 5000 });
+      const de = await page.evaluate(() => ({
+        h: document.querySelector('.modal h2').textContent,
+        legend: document.querySelector('.modal .settings > legend').textContent,
+        gfx: document.querySelector('#gfx-section > legend').textContent,
+        quality: document.querySelector('#gfx-section .setting-row span').textContent,
+        reduced: [...document.querySelectorAll('.modal .setting-row span')].some((s) => s.textContent === 'Weniger Bewegung'),
+        play: document.querySelector('.title-screen .btn-primary').textContent,
+        stillThere: !!document.querySelector('#gfx-section [data-game-language="choice"]'),
+      }));
+      if (de.h !== 'Einstellungen' || de.legend !== 'Einstellungen' || de.gfx !== 'Grafik' || de.quality !== 'Qualität' || !de.reduced ||
+        de.play !== '▶ Spielen' || !de.stillThere) throw new Error('not re-rendered: ' + JSON.stringify(de));
+      const saved = bodies['PUT /api/v1/games/eight-webs/settings/ui.language'];
+      if (!saved || JSON.parse(saved).value.choice !== 'de-DE') throw new Error('ui.language not saved: ' + saved);
+      await page.locator('[data-game-report="title"]').scrollIntoViewIfNeeded();
+      await page.fill('[data-game-report="title"]', 'Language test report');
+      await page.locator('[data-game-report="send"]').click();
+      await page.waitForFunction(() => /Danke/.test(document.querySelector('[data-game-report="status"]').textContent), null, { timeout: 5000 });
+      if (JSON.parse(bodies['POST /api/v1/games/eight-webs/reports'] || '{}').kind !== 'bug') throw new Error('report not posted');
+      await page.screenshot({ path: SHOT('language-de', tag) });
+      if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error('German settings overflow horizontally');
+      const close = page.locator('.modal .btn-primary', { hasText: 'Schließen' });
+      await close.scrollIntoViewIfNeeded();
+      await click(close);
+    });
+    await step(`[${tag}] language: switching mid-round re-renders the HUD, board and pause dialog and keeps the round`, async () => {
+      await click(page.locator('.title-screen .btn-primary'));
+      await click(page.locator('.mode-card', { hasText: 'Training' }));
+      await click(page.locator('.setup-card .btn-primary').first());
+      await page.waitForFunction(() => window.__eightwebs?.session.machine === 'active', null, { timeout: 9000 });
+      const moves = await page.evaluate(() => window.__eightwebs.session.state.moves);
+      await click(page.locator('.top-bar .icon-btn'));
+      await page.waitForSelector('.modal h2');
+      const choice = page.locator('[data-game-language="choice"]');
+      await choice.scrollIntoViewIfNeeded();
+      await choice.selectOption('it-IT');
+      await page.waitForFunction(() => document.documentElement.lang === 'it-IT');
+      const it = await page.evaluate(() => ({
+        h: document.querySelector('.modal h2').textContent,
+        deal: document.querySelector('.bottom-tray .btn-primary').textContent,
+        card: document.querySelector('.board .card.face-up')?.getAttribute('aria-label') || '',
+        title: document.querySelector('.top-title').textContent,
+        machine: window.__eightwebs.session.machine,
+        moves: window.__eightwebs.session.state.moves,
+      }));
+      if (it.h !== 'In pausa' || it.deal !== 'Distribuisci' || !/^Colonna \d+: .+ di Filo/.test(it.card) || !/^Allenamento — /.test(it.title) ||
+        it.machine !== 'paused' || it.moves !== moves) throw new Error('round not re-rendered: ' + JSON.stringify(it));
+      await choice.selectOption('auto');
+      await page.waitForFunction(() => document.documentElement.lang === 'fr-CA');
+      if ((await page.locator('.modal h2').textContent()) !== 'En pause') throw new Error('pause title not relabelled');
+      await click(page.locator('.modal .btn-primary', { hasText: 'Reprendre' }));
+      await page.waitForFunction(() => window.__eightwebs.session.machine === 'active');
     });
   } finally {
     await context.close();

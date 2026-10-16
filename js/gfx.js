@@ -82,13 +82,15 @@ export function choosePreset(saved, preset) {
 }
 
 /** Short English cost summary (the panel localizes its own labels around it). */
-export function describe(r, pixels) {
+// tr(key, vars) localizes the parts (the UI passes i18n T; default English).
+const plain = (s, v) => String(s).replace(/\{(\w+)\}/g, (_, k) => (v && v[k] != null ? v[k] : ''));
+export function describe(r, pixels, tr = plain) {
   const parts = [
-    r.shadows === 'off' ? 'no shadows' : `${SHADOW_MAP[r.shadows]}² shadows`,
-    r.ao === 'off' ? null : r.ao === 'high' ? 'full AO' : 'AO',
-    r.bloom === 'on' ? 'bloom' : null,
-    r.reflections === 'on' ? 'reflections' : null,
-    r.antialias === 'off' ? 'no AA' : r.antialias.toUpperCase(),
+    r.shadows === 'off' ? tr('no shadows') : tr('{size}² shadows', { size: SHADOW_MAP[r.shadows] }),
+    r.ao === 'off' ? null : r.ao === 'high' ? tr('full AO') : tr('AO'),
+    r.bloom === 'on' ? tr('bloom') : null,
+    r.reflections === 'on' ? tr('reflections') : null,
+    r.antialias === 'off' ? tr('no AA') : r.antialias.toUpperCase(),
     pixels ? `${pixels[0]}×${pixels[1]} px` : null,
   ];
   return parts.filter(Boolean).join(' · ');

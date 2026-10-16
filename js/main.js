@@ -7,8 +7,11 @@ import { UI } from './ui.js';
 import { TableRenderer } from './render.js';
 import { AudioEngine } from './audio.js';
 import { getTheme } from './content.js';
+import { T, initLanguage } from './i18n.js';
 
 async function boot() {
+  // Resolve the game language before anything renders (sh-language.js).
+  initLanguage();
   const root = document.getElementById('app');
   const platform = new Platform();
 
@@ -34,7 +37,8 @@ async function boot() {
   if (!glOk) {
     const note = document.createElement('p');
     note.className = 'compat-note';
-    note.textContent = '3D view unavailable on this device — the accessible table below is fully playable.';
+    note.textContent = T('3D view unavailable on this device — the accessible table below is fully playable.');
+    note.dataset.i18n = '3D view unavailable on this device — the accessible table below is fully playable.';
     renderer.container.prepend(note);
   }
 
@@ -61,5 +65,5 @@ async function boot() {
 
 boot().catch((e) => {
   document.getElementById('app').innerHTML =
-    `<div class="wrap"><h1>Eight Webs</h1><p>Failed to start: ${e.message}</p></div>`;
+    `<div class="wrap"><h1>Eight Webs</h1><p>${T('Failed to start: {error}', { error: e.message })}</p></div>`;
 });

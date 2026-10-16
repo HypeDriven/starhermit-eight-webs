@@ -632,6 +632,7 @@ export class TableRenderer {
       detected: this.detected,
       resolved: this.q,
       summary: describe(this.q, this.ok ? px : null),
+      pixels: this.ok ? px : null,
       fps: Math.round(this.fps || 0),
       adaptiveScale: Math.round(this.adaptiveScale * 100) / 100,
       postFailed: !!this.postFailed,

@@ -267,6 +267,7 @@ async function playthrough(ctxOpts, tag, maxHintMoves) {
       if (!(await page.locator('#gfx-bloom option[value="preset"]').textContent()).includes('(On)')) throw new Error('bloom preset label');
       await page.locator('#gfx-bloom').selectOption('off');
       await page.waitForFunction(() => !/bloom/.test(document.querySelector('#gfx-summary').textContent));
+      if (!/ · Level 0 · /.test(await page.locator('#gfx-summary').textContent())) throw new Error('summary lacks the hardware level: ' + await page.locator('#gfx-summary').textContent());
       if ((await saved()).bloom !== 'off') throw new Error('bloom override not saved');
       if (!(await page.locator('.shell').getAttribute('class')).includes('gfx-detailed')) throw new Error('High should use detailed surfaces');
       await page.screenshot({ path: SHOT('graphics', tag) });

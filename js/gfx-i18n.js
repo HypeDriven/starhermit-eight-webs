@@ -4,6 +4,7 @@
 import { getLang } from './i18n.js';
 
 const EN = {
+  level: 'Level {n}',
   settings: 'Settings', close: 'Close', graphics: 'Graphics',
   quality: 'Quality', auto: 'Auto (detected: {tier})', fromPreset: 'From preset ({tier})',
   renderScale: 'Render scale', adaptive: 'Adaptive resolution', showFps: 'Show frame rate',
@@ -25,6 +26,7 @@ const EN = {
 const US = { ...EN, cats: { ...EN.cats, grade: 'Color grade' } };
 
 const ES = {
+  level: 'Nivel {n}',
   settings: 'Ajustes', close: 'Cerrar', graphics: 'Gráficos',
   quality: 'Calidad', auto: 'Automática (detectada: {tier})', fromPreset: 'Según el ajuste ({tier})',
   renderScale: 'Escala de render', adaptive: 'Resolución adaptativa', showFps: 'Mostrar FPS',
@@ -45,6 +47,7 @@ const ES = {
 const ES419 = { ...ES, settings: 'Configuración', renderScale: 'Escala de renderizado' };
 
 const DE = {
+  level: 'Stufe {n}',
   settings: 'Einstellungen', close: 'Schließen', graphics: 'Grafik',
   quality: 'Qualität', auto: 'Automatisch (erkannt: {tier})', fromPreset: 'Laut Voreinstellung ({tier})',
   renderScale: 'Renderskalierung', adaptive: 'Adaptive Auflösung', showFps: 'Bildrate anzeigen',
@@ -64,6 +67,7 @@ const DE = {
 };
 
 const FR = {
+  level: 'Niveau {n}',
   settings: 'Paramètres', close: 'Fermer', graphics: 'Graphismes',
   quality: 'Qualité', auto: 'Auto (détecté : {tier})', fromPreset: 'Selon le préréglage ({tier})',
   renderScale: 'Échelle de rendu', adaptive: 'Résolution adaptative', showFps: 'Afficher les IPS',
@@ -84,6 +88,7 @@ const FR = {
 const FRCA = { ...FR, showFps: 'Afficher les images/s', cats: { ...FR.cats, antialias: 'Antialiasing' } };
 
 const PT = {
+  level: 'Nível {n}',
   settings: 'Configurações', close: 'Fechar', graphics: 'Gráficos',
   quality: 'Qualidade', auto: 'Automática (detectada: {tier})', fromPreset: 'Da predefinição ({tier})',
   renderScale: 'Escala de renderização', adaptive: 'Resolução adaptativa', showFps: 'Mostrar FPS',
@@ -103,6 +108,7 @@ const PT = {
 };
 
 const IT = {
+  level: 'Livello {n}',
   settings: 'Impostazioni', close: 'Chiudi', graphics: 'Grafica',
   quality: 'Qualità', auto: 'Automatica (rilevata: {tier})', fromPreset: 'Da preimpostazione ({tier})',
   renderScale: 'Scala di rendering', adaptive: 'Risoluzione adattiva', showFps: 'Mostra FPS',

@@ -15,8 +15,9 @@ import {
   dailyForDate, validateContent, validateAll, THEMES, ACHIEVEMENTS,
 } from '../js/content.js';
 import { Session } from '../js/session.js';
+import '../gpu-level.js';
 import {
-  detectPreset, resolve as resolveGfx, presetTier, choosePreset, describe as describeGfx,
+  detectPreset, detectLevel, presetForLevel, budgetFor, BUDGETS, resolve as resolveGfx, presetTier, choosePreset, describe as describeGfx,
   CATEGORIES, PRESETS,
 } from '../js/gfx.js';
 import { GFX_STRINGS, pickLocale } from '../js/gfx-i18n.js';
@@ -414,16 +415,45 @@ test('practice + challenge content passes validators', () => {
 });
 
 // --- graphics quality model (js/gfx.js) ---------------------------------------
-test('gfx: detectPreset maps GPU strings to tiers; mobile caps at balanced', () => {
-  assert.equal(detectPreset('ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)'), 'low');
-  assert.equal(detectPreset('llvmpipe (LLVM 15.0.7, 256 bits)'), 'low');
-  assert.equal(detectPreset('ANGLE (NVIDIA, NVIDIA GeForce RTX 3080 Direct3D11 vs_5_0 ps_5_0, D3D11)'), 'high');
-  assert.equal(detectPreset('Apple M2 Pro'), 'high');
-  assert.equal(detectPreset('ANGLE (Intel, Intel(R) UHD Graphics 620 Direct3D11 vs_5_0 ps_5_0, D3D11)'), 'balanced');
-  assert.equal(detectPreset('Adreno (TM) 740'), 'balanced');
-  assert.equal(detectPreset(''), 'balanced');
-  assert.equal(detectPreset('NVIDIA GeForce RTX 4090', { mobile: true }), 'balanced');
-  assert.equal(detectPreset('SwiftShader', { mobile: true }), 'low');
+const desk = { webgl: true, webgl2: true, cores: 8, memoryGb: 8 };
+const phone = { webgl: true, webgl2: true, mobile: true, cores: 8, memoryGb: 8 };
+
+test('gfx: hardware level → preset: Low 0, Balanced 4, High 10, Ultra 17', () => {
+  assert.equal(detectPreset('ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)', desk), 'low');
+  assert.equal(detectLevel('llvmpipe (LLVM 15.0.7, 256 bits)', desk), 0);
+  assert.equal(detectPreset('ANGLE (AMD, AMD Radeon(TM) Graphics Direct3D11 vs_5_0 ps_5_0)', desk), 'low');
+  assert.equal(detectPreset('ANGLE (Intel, Intel(R) UHD Graphics 620 Direct3D11)', desk), 'low');
+  assert.equal(detectPreset('ANGLE (Intel, Intel(R) Iris(R) Xe Graphics Direct3D11)', desk), 'balanced');
+  assert.equal(detectPreset('ANGLE (NVIDIA, NVIDIA GeForce GTX 1070 Direct3D11 vs_5_0 ps_5_0)', desk), 'high');
+  assert.equal(detectPreset('ANGLE (NVIDIA, NVIDIA GeForce RTX 4080 Direct3D11 vs_5_0 ps_5_0)', desk), 'ultra');
+  assert.equal(detectLevel('ANGLE (NVIDIA, NVIDIA GeForce RTX 5090 Direct3D11 vs_5_0 ps_5_0)', desk), 20);
+  assert.equal(detectPreset('ANGLE (NVIDIA, NVIDIA GeForce RTX 5090 Direct3D11 vs_5_0 ps_5_0)', desk), 'ultra');
+  assert.equal(detectPreset('', desk), 'balanced');
+  assert.equal(presetForLevel(3), 'low');
+  assert.equal(presetForLevel(16), 'high');
+});
+
+test('gfx: phones and tablets are capped at Balanced; software GPUs stay Low', () => {
+  assert.equal(detectPreset('Adreno (TM) 740', phone), 'balanced');
+  assert.ok(detectLevel('Adreno (TM) 740', phone) <= 9);
+  assert.equal(detectPreset('NVIDIA GeForce RTX 4090', phone), 'balanced');
+  assert.equal(detectPreset('Mali-G77', phone), 'low');
+  assert.equal(detectPreset('SwiftShader', phone), 'low');
+});
+
+test('gfx: every preset has an explicit budget that grows from Low to Ultra and scales with the level', () => {
+  const order = ['low', 'balanced', 'high', 'ultra'];
+  const keys = ['material', 'cardTex', 'sparks', 'motes', 'bloomRes', 'aoRes'];
+  const mats = ['lambert', 'standard', 'physical'];
+  for (const p of order) for (const k of keys) assert.ok(BUDGETS[p][k] != null, `${p}.${k}`);
+  for (let i = 1; i < order.length; i++) {
+    for (const k of keys) if (typeof BUDGETS.low[k] === 'number') assert.ok(BUDGETS[order[i]][k] >= BUDGETS[order[i - 1]][k], `${order[i]}.${k}`);
+    assert.ok(mats.indexOf(BUDGETS[order[i]].material) >= mats.indexOf(BUDGETS[order[i - 1]].material));
+  }
+  assert.deepEqual(resolveGfx({ preset: 'ultra' }, 'low', {}, 0).budget, resolveGfx({ preset: 'ultra' }, 'ultra', {}, 17).budget);
+  assert.ok(budgetFor('low', 3).motes > budgetFor('low', 0).motes, 'counts scale up with the level');
+  assert.ok(budgetFor('low', 20).sparks <= 4 * BUDGETS.low.sparks, 'never more than 4×');
+  assert.equal(resolveGfx({ preset: 'balanced' }, 'low').scale, 0.9);
 });
 
 test('gfx: resolve applies preset, auto, overrides and clamps render scale', () => {
@@ -442,8 +472,9 @@ test('gfx: resolve applies preset, auto, overrides and clamps render scale', () 
   assert.equal(o.bloom, 'off');
   assert.equal(o.shadows, 'high');
   assert.equal(o.ao, presetTier('high', 'ao'), 'invalid override falls back to the preset');
-  assert.equal(resolveGfx({ render_scale: 9 }, 'balanced').scale, 2);
-  assert.equal(resolveGfx({ render_scale: 0.1 }, 'balanced').scale, 0.5);
+  assert.equal(resolveGfx({ render_scale: 9 }, 'balanced').renderScale, 2);
+  assert.equal(resolveGfx({ render_scale: 0.1 }, 'balanced').renderScale, 0.5);
+  assert.equal(resolveGfx({ render_scale: 9 }, 'balanced').scale, 1.8, 'Balanced scale 0.9 × 200 %');
   assert.equal(resolveGfx({ preset: 'ultra', render_scale: 2 }, 'low').scale, 2.5);
   assert.equal(resolveGfx({ preset: 'nope' }, 'nope').preset, 'balanced');
   assert.equal(resolveGfx({ adaptive: false, show_fps: true }, 'low').adaptive, false);

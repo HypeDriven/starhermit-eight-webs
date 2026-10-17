@@ -19,7 +19,16 @@ import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { createStream, rankLabel } from './render-helpers.js';
-import { detectPreset, describe, resolve, SHADOW_MAP, PARTICLE_BUDGET } from './gfx.js';
+import { detectLevel, presetForLevel, describe, resolve, SHADOW_MAP, PARTICLE_BUDGET } from './gfx.js';
+
+// Run a post pass at a fraction of the frame (per-preset budget). EffectComposer sizes every pass to the
+// full frame in addPass/setSize, so the pass's own setSize is wrapped to apply the scale.
+function atScale(pass, k) {
+  if (!(k > 0 && k < 1)) return pass;
+  const setSize = pass.setSize.bind(pass);
+  pass.setSize = (w, h) => setSize(Math.max(1, Math.round(w * k)), Math.max(1, Math.round(h * k)));
+  return pass;
+}
 
 // ---------------------------------------------------------------------------
 // Shared layout model (px within the playfield rect). UI and 3D both use it.
@@ -75,12 +84,13 @@ export function computeLayout(state, W, H, opts = {}) {
 // ---------------------------------------------------------------------------
 
 const texCache = new Map();
-function cardTexture(theme, suits, cardDef, faceUp) {
-  const key = faceUp ? `f:${cardDef.r}:${cardDef.s}:${theme.card}` : `b:${theme.felt}`;
+function cardTexture(theme, suits, cardDef, faceUp, k = 1) {
+  const key = (faceUp ? `f:${cardDef.r}:${cardDef.s}:${theme.card}` : `b:${theme.felt}`) + `@${k}`;
   if (texCache.has(key)) return texCache.get(key);
   const cv = document.createElement('canvas');
-  cv.width = 128; cv.height = 180;
+  cv.width = Math.round(128 * k); cv.height = Math.round(180 * k); // per-preset variant (budget.cardTex)
   const g = cv.getContext('2d');
+  g.scale(k, k);
   const rr = (x, y, w, h, r) => {
     g.beginPath();
     g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r);
@@ -229,7 +239,7 @@ const GradeShader = {
 
 const EASE = (t) => 1 - Math.pow(1 - t, 3); // cubic-out, authored duration
 const CARD_Z = 4;   // resting card height above the felt (casts a soft shadow)
-const MOTES = 64;   // drifting silk motes (background: animated)
+const MOTES = 256;  // drifting silk motes pool (background: animated); budget.motes are drawn
 
 export class TableRenderer {
   constructor(container, getTheme, getSettings) {
@@ -261,7 +271,8 @@ export class TableRenderer {
     this._gfxJson = null;
     this.gpu = '';
     this.detected = 'balanced';
-    this.q = resolve({}, this.detected);
+    this.hwLevel = 4;
+    this.q = resolve({}, this.detected, {}, this.hwLevel);
     this.adaptiveScale = 1;
     this._frames = [];
     this.fps = 0;
@@ -328,7 +339,10 @@ export class TableRenderer {
     const mm = (q) => typeof matchMedia === 'function' && matchMedia(q).matches;
     const mobile = (mm('(pointer: coarse)') && !mm('(any-pointer: fine)'))
       || /Android|iPhone|iPad|Mobile/i.test(typeof navigator !== 'undefined' ? navigator.userAgent : '');
-    this.detected = detectPreset(name, { mobile });
+    // StarHermit hardware level → Auto preset (SwiftShader = level 0 → Low; phones cap at Balanced).
+    const system = globalThis.StarHermitGpu ? globalThis.StarHermitGpu.detectSystem() : { mobile };
+    this.hwLevel = detectLevel(name, system);
+    this.detected = presetForLevel(this.hwLevel);
     const inner = name.match(/^ANGLE \((.*)\)$/);
     const parts = inner ? inner[1].split(', ') : [name];
     this.gpu = (parts.length >= 3 ? parts[1] : parts.join(', ')).replace(/\s*\((0x[0-9a-f]+|Subzero)\)/gi, '').trim() || 'unknown GPU';
@@ -387,32 +401,49 @@ export class TableRenderer {
   }
 
   // Materials depend on theme + detail + reflections; rebuilt only when those change.
+  /**
+   * Lit material in the preset budget's class: Lambert on Low, Standard on Balanced, Physical (clearcoat)
+   * on High/Ultra where `physical` is asked for. Parameters a class lacks are dropped (no warnings).
+   */
+  litMaterial(params, physical = false) {
+    const kind = this.q?.budget?.material || 'standard';
+    const { roughness, metalness, clearcoat, clearcoatRoughness, envMapIntensity, bumpScale, ...rest } = params;
+    if (kind === 'lambert') return new THREE.MeshLambertMaterial(rest);
+    if (kind === 'physical' && physical) return new THREE.MeshPhysicalMaterial(params);
+    const sp = { ...rest };
+    if (roughness != null) sp.roughness = roughness;
+    if (metalness != null) sp.metalness = metalness;
+    if (envMapIntensity != null) sp.envMapIntensity = envMapIntensity;
+    if (bumpScale != null) sp.bumpScale = bumpScale;
+    return new THREE.MeshStandardMaterial(sp);
+  }
+
   envMaterials() {
     const theme = this.getTheme();
     const q = this.q;
     const detailed = q.detail === 'detailed';
-    const key = [theme.id, theme.felt, q.detail, q.reflections].join('|');
+    const key = [theme.id, theme.felt, q.detail, q.reflections, q.budget.material].join('|');
     if (key === this._matKey) return this.envMats;
     this._matKey = key;
     for (const m of Object.values(this.envMats || {})) m.dispose();
     const refl = q.reflections === 'on';
     const envMap = refl ? this.envMap() : null; // per material, so envMapIntensity applies
-    const felt = new THREE.MeshStandardMaterial({
+    const felt = this.litMaterial({
       color: detailed ? 0xffffff : theme.felt, map: detailed ? feltTexture(theme) : null,
       bumpMap: detailed ? feltTexture(theme) : null, bumpScale: 0.6,
       roughness: 0.95, metalness: 0, envMap, envMapIntensity: 0.12,
     });
-    const frameMat = (vertical) => new THREE.MeshPhysicalMaterial({
+    const frameMat = (vertical) => this.litMaterial({
       color: detailed ? 0xffffff : theme.frame, map: detailed ? woodTexture(theme, vertical) : null,
       roughness: 0.6, metalness: 0, clearcoat: detailed ? 0.6 : 0, clearcoatRoughness: 0.25,
       envMap, envMapIntensity: 0.45,
-    });
+    }, true);
     this.envMats = {
       felt,
-      edge: new THREE.MeshStandardMaterial({ color: theme.feltEdge, roughness: 0.9 }),
+      edge: this.litMaterial({ color: theme.feltEdge, roughness: 0.9 }),
       frameH: frameMat(false),
       frameV: frameMat(true),
-      inlay: new THREE.MeshStandardMaterial({ color: theme.accent, roughness: 0.3, metalness: refl ? 0.75 : 0.2, envMap, envMapIntensity: 1 }),
+      inlay: this.litMaterial({ color: theme.accent, roughness: 0.3, metalness: refl ? 0.75 : 0.2, envMap, envMapIntensity: 1 }),
       silk: new THREE.LineBasicMaterial({ color: theme.card, transparent: true, opacity: 0.17, depthWrite: false }),
       thread: new THREE.LineBasicMaterial({ color: theme.accent, transparent: true, opacity: 0.55, depthWrite: false }),
     };
@@ -503,7 +534,7 @@ export class TableRenderer {
     // Fixed pool of 104 card meshes + foundation/stock markers; geometry shared.
     this.cardGeo = new THREE.BoxGeometry(1, 1, 2);
     for (let i = 0; i < 104; i++) {
-      const mesh = new THREE.Mesh(this.cardGeo, new THREE.MeshStandardMaterial({ color: 0xb4b4b4, roughness: 0.6, envMapIntensity: 0.3 }));
+      const mesh = new THREE.Mesh(this.cardGeo, this.litMaterial({ color: 0xb4b4b4, roughness: 0.6, envMapIntensity: 0.3 }));
       mesh.castShadow = true; mesh.receiveShadow = true;
       mesh.visible = false;
       mesh.userData.kind = 'card';
@@ -553,7 +584,9 @@ export class TableRenderer {
     const pos = this.motes.geometry.attributes.position.array;
     const col = this.motes.geometry.attributes.color.array;
     const c = new THREE.Color(this.getTheme().card);
-    for (let i = 0; i < MOTES; i++) {
+    const n = Math.min(MOTES, this.q.budget.motes);
+    this.motes.geometry.setDrawRange(0, n);
+    for (let i = 0; i < n; i++) {
       const m = this.moteData[i];
       const x = ((m.x * W + m.vx * t) % (W + 20) + (W + 20)) % (W + 20) - 10;
       const y = ((m.y * H + m.vy * t + Math.sin(t * 0.4 + m.ph) * 12) % (H + 20) + (H + 20)) % (H + 20) - 10;
@@ -579,7 +612,10 @@ export class TableRenderer {
   }
 
   applyGraphics() {
-    const g = this.q = resolve(this.saved, this.detected);
+    const prevKey = this._assetKey;
+    const g = this.q = resolve(this.saved, this.detected, {}, this.hwLevel);
+    // Asset variants: card-face texture size and material class (rebuilt below when they change).
+    this._assetKey = [g.budget.material, g.budget.cardTex].join('|');
     if (typeof document !== 'undefined') {
       document.body.dataset.gfxPreset = g.preset;
       document.body.dataset.gfxAuto = g.auto ? '1' : '0';
@@ -596,6 +632,16 @@ export class TableRenderer {
       this.lightKey.shadow.map = null;
     }
     const envMap = g.reflections === 'on' ? this.envMap() : null;
+    if (prevKey !== this._assetKey) {
+      this._matKey = null; // environment materials follow the class too
+      for (const c of this.cards) {
+        const map = c.material.map;
+        c.material.dispose();
+        c.material = this.litMaterial({ color: 0xb4b4b4, roughness: 0.6, envMapIntensity: 0.3 });
+        c.material.map = map;
+      }
+      if (this.lastState) this.sync(this.lastState, true); // re-face the cards at the new texture size
+    }
     for (const c of this.cards) c.material.envMap = envMap;
     if (this.motes) this.motes.visible = g.background === 'animated';
     this.layoutEnv();
@@ -629,6 +675,7 @@ export class TableRenderer {
     return {
       ok: !!this.ok,
       gpu: this.gpu || 'unknown GPU',
+      level: this.hwLevel,
       detected: this.detected,
       resolved: this.q,
       summary: describe(this.q, this.ok ? px : null),
@@ -673,7 +720,7 @@ export class TableRenderer {
       composer.setSize(w, h);
       composer.addPass(new RenderPass(this.scene, this.camera));
       if (g.ao !== 'off') {
-        const ao = new GTAOPass(this.scene, this.camera, w * pr, h * pr);
+        const ao = atScale(new GTAOPass(this.scene, this.camera, w * pr, h * pr), g.budget.aoRes);
         ao.output = GTAOPass.OUTPUT.Default;
         ao.blendIntensity = 0.75;
         const hi = g.ao === 'high';
@@ -683,7 +730,7 @@ export class TableRenderer {
       }
       if (g.bloom === 'on') {
         // High threshold: only glints, sparks and highlights bloom.
-        composer.addPass(new UnrealBloomPass(new THREE.Vector2(w, h), 0.6, 0.45, 0.9));
+        composer.addPass(atScale(new UnrealBloomPass(new THREE.Vector2(w, h), 0.6, 0.45, 0.9), g.budget.bloomRes));
       }
       if (g.grade === 'on') composer.addPass(new ShaderPass(GradeShader));
       composer.addPass(new OutputPass());
@@ -774,7 +821,7 @@ export class TableRenderer {
     const place = (card, rect, opts = {}) => {
       const mesh = this.cards[ci++];
       mesh.visible = true;
-      const tex = cardTexture(theme, suits, card, !!card.u);
+      const tex = cardTexture(theme, suits, card, !!card.u, this.q.budget.cardTex);
       if (mesh.material.map !== tex) { mesh.material.map = tex; mesh.material.needsUpdate = true; }
       const lift = CARD_Z + (opts.lift || 0);
       if (instant || this.reducedMotion()) {
@@ -843,7 +890,7 @@ export class TableRenderer {
   burst(x, y, color, n = 12) {
     if (this.reducedMotion() || !this.ok) return;
     const hi = this.q.particles === 'high';
-    const budget = PARTICLE_BUDGET[this.q.particles];
+    const budget = Math.min(PARTICLE_BUDGET[this.q.particles], this.q.budget.sparks); // per-preset spark budget
     n = Math.min(hi ? Math.round(n * 1.5) : n, budget - this.fx.length);
     const c = new THREE.Color(color);
     if (hi) c.multiplyScalar(2.4);

@@ -1199,7 +1199,7 @@ export class UI {
       fps.checked = !!s.graphics.show_fps;
       const gpu = i.gpu === 'unknown GPU' ? T('unknown GPU') : i.gpu;
       const cost = i.resolved ? describeGfx(i.resolved, i.pixels || null, T) : i.summary;
-      summary.textContent = [gpu, cost].filter(Boolean).join(' · ');
+      summary.textContent = [gpu, i.ok ? fmt(G.level, { n: i.level ?? 0 }) : null, cost].filter(Boolean).join(' · ');
       const msg = !i.ok ? G.noWebgl : i.postFailed ? G.postFailed : '';
       note.textContent = msg;
       note.hidden = !msg;

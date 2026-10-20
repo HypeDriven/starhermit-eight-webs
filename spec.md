@@ -141,7 +141,7 @@ won > lost > aborted; then more webs; then higher total; then fewer invalid acti
 | Drag | Press, move > 12 px, release over a column | Same (pointer capture, `touch-action: none`) | Lift happens at the threshold; releasing on the origin sets it down quietly (`deselect`); releasing off-table keeps it lifted |
 | Cancel | Escape, or tap the lifted run again | Tap the lifted run again | `deselect` clip |
 | Deal | **Deal** button, `D`, or click a stock packet | Same | `deal` clip, green burst, toast if a column is empty |
-| Hint | **Hint** button or `H` | Same | Dashed accent outline for 3.5 s, `hint` clip, spoken announcement |
+| Hint | **Hint** button or `H` | Same | Dashed accent outline for 3.5 s (removed in place, never by rebuilding the cards, so a card pressed as it ends still gets the click), `hint` clip, spoken announcement |
 | Undo | **Undo** button or `U` | Same | `undo` clip, "Move undone." |
 | Pause | ☰ button, Escape (no selection), gamepad Start | ☰ | Pause modal with settings; `pause` clip |
 | Keyboard board | Arrow keys move a focus cursor across columns/cards, Enter/Space lifts or drops | — | Focused card gets a 3 px outline; board has `role="application"` |

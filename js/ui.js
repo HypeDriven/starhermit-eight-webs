@@ -978,12 +978,22 @@ export class UI {
         rank: rankLabel(this.session.state.cols[h.from][h.idx].r), suit: T(suit.name), from: h.from + 1, to: h.to + 1,
       }));
       this.syncBoard();
-      setTimeout(() => { this.hintMove = null; if (this.screen === 'play') this.syncBoard(); }, 3500);
+      setTimeout(() => { this.hintMove = null; if (this.screen === 'play') this.clearHintMarks(); }, 3500);
     } else if (h?.none) {
       this.announce(T(h.canDeal ? N('No moves — deal from the stock.') : N('No legal moves remain.')));
       this.toast(T(h.canDeal ? N('No moves available — deal from the stock.') : N('No legal moves remain.')));
     } else if (h?.error) {
       this.toast(reasonText(h.error), 2500);
+    }
+  }
+
+  // The hint's dashes end in place: rebuilding the card layer here would
+  // replace a card the player is pressing, and a click only fires when press
+  // and release land on the same element.
+  clearHintMarks() {
+    for (const b of this.boardEl.querySelectorAll('.card.hinted')) b.classList.remove('hinted');
+    if (this.session.state && this.renderer) {
+      this.renderer.setSelection(this.session.selection, this.session.selection ? this.session.legalTargets() : [], this.hintMove);
     }
   }
 

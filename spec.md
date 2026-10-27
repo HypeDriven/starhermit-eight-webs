@@ -11,7 +11,7 @@ Present-tense description of the shipped game. Every statement below is true of 
 | Genre | Single-player card sequencing puzzle (Spider-family patience with authored progression) |
 | Players | 1; local scores, history and a per-device daily board |
 | Session length | Learn lesson 1–2 min; Journey/Practice/Daily round 10–40 min; Challenges 10–25 min |
-| Platforms | StarHermit engine script game (engine 1.16.5, host API 1.18): natively in the StarHermit client and in desktop and mobile browsers through the engine's web runtime |
+| Platforms | StarHermit engine script game (engine 1.17.0, host API 1.19): natively in the StarHermit client and in desktop and mobile browsers through the engine's web runtime |
 | Rendering | `starhermit:scene` orthographic "shadow-box" table under the card layer drawn with `starhermit:ui` (cards, stock, webs and pads are accessible widgets), both from one layout model |
 | Entry | `native/main.ts` (`engine.entry`); browsers open the engine's loader `index.html` (`launch`); platform script `score-script.js` (`server=`) |
 
@@ -19,9 +19,9 @@ Present-tense description of the shipped game. Every statement below is true of 
 
 | Path | Responsibility |
 |---|---|
-| `starhermit.txt` | Manifest: name, description, owner, `server=score-script.js`, cover, `launch=index.html`, `engine.api=1`, `engine.entry=native/main.ts`, `engine.version=1.16.5`, `engine.minor=18`, capabilities `platform,storage,clipboard`, `control.*` and `engine.gamepad.*` for every action |
+| `starhermit.txt` | Manifest: name, description, owner, `server=score-script.js`, cover, `launch=index.html`, `engine.api=1`, `engine.entry=native/main.ts`, `engine.version=1.17.0`, `engine.minor=19`, capabilities `platform,storage,clipboard`, `control.*` and `engine.gamepad.*` for every action |
 | `native/main.ts` | Entry: the round controller (screens and dialogs state, round lifecycle with the saved round, selection, card cursor, drags, Deal/Undo/Hint, the clock, event presentation, progression, achievements, history, score posting, lifecycle), all on the runtime's fixed steps |
-| `native/screens.ts` | Every screen, the HUD, the card layer, dialogs, toasts and captions on `starhermit:ui`; drawn glyphs for the symbols fonts may lack (▶ ✓ ★ 🕸 🏅 ⏱ ♪ ☰ and the thread shapes ●◆▲■) |
+| `native/screens.ts` | Every screen, the HUD, the card layer, dialogs, toasts and captions on `starhermit:ui`; symbols and emoji (▶ ✓ ★ 🕸 🏅 ⏱ ♪ ☰ and the thread glyphs ●◆▲■) are plain text, drawn by the engine's fonts and built-in emoji |
 | `native/render.ts` | The 3D table (`starhermit:scene`): felt, frame, inlay, corner webs, motes, sparks, lights, post chain per look |
 | `native/quality.ts` | The browser build's presets and budgets keyed by the runtime's quality tier and level |
 | `native/audio.ts` | Clips, room tone, music bed and rendered plucks on the runtime's buses; captions |
@@ -124,7 +124,7 @@ won > lost > aborted; then more webs; then higher total; then fewer invalid acti
 
 **Unlocks and records.** `progress` (the game's save, §12) tracks journey wins with score and time, lessons done, mastery, achievements, lifetime webs, distinct days played, and per-content bests. The last 50 results are kept in the device's history; Scores shows the last 10.
 
-**Achievements** (`ACHIEVEMENTS`, granted in `UI.onRoundEnd`, idempotent): First Web, Full Toolkit (won a round after dealing, using an empty column and clearing a web), Five-Day Weave (webs cleared on five distinct days), Mastery Bound, Century of Silk (100 webs). New unlocks appear in the results dialog with a medal glyph and a chime 0.7 s after the sting; they are kept in the save (not platform achievements).
+**Achievements** (`ACHIEVEMENTS`, granted in `UI.onRoundEnd`, idempotent): First Web, Full Toolkit (won a round after dealing, using an empty column and clearing a web), Five-Day Weave (webs cleared on five distinct days), Mastery Bound, Century of Silk (100 webs). New unlocks appear in the results dialog with a 🏅 and a chime 0.7 s after the sting; they are kept in the save (not platform achievements).
 
 ## 6. Controls and interaction
 
@@ -162,7 +162,6 @@ Input locking: cards, stock and pads take presses only while `Session.inRound()`
 - Safe areas: the UI lays out inside the runtime's safe area; the margins outside it take the panel colour.
 - The board layout (`computeLayout`) fits ten columns to the playfield width and compresses card overlap so the longest column always fits the height; nothing on the table scrolls or clips. Menus scroll vertically (`justify-content: safe center`) so the Back button is always reachable.
 - Sizes are logical pixels times `ui.preferences().scale` (the window's scale and the player's interface size); the runtime's interface and text size options enlarge everything, and the breakpoints follow the logical size. Card ranks are max(12, 1.4 % of the width) px, thread shapes max(14, 2.4 %).
-- The countdown digit is capped at 240 window pixels (the engine 1.16 web runtime drops taller glyphs).
 
 ## 8. Art direction
 
@@ -180,7 +179,7 @@ Input locking: cards, stock and pads take presses only while `Session.inRound()`
 
 Danger is `#c0392b` (`#eb5757` on Midnight). Threads: Crimson `#c0392b` ●, Amber `#c97b12` ◆, Jade `#1f8a70` ▲, Indigo `#3457c9` ■; CVD palettes (deuter/protan/tritan) replace the four colours with Okabe-Ito-style sets while glyphs stay.
 
-**Shape and type.** 8–14 px radii on cards, pads and dialogs; 1.5 px card borders (2.5 px under the runtime's high contrast); the system sans throughout. Cards are drawn by the UI exactly as the browser build's DOM cards were: an ivory face (`#fdfaf2`) with the rank top-left and the thread's shape centred in the thread colour, a felt-coloured back, a striped felt stock with its "DEAL" label on the top packet (beside the pile when it does not fit), accent webs for cleared runs, dashed pads for empty columns. On the detailed looks the faces get a paper sheen and two-layer shadow, the backs a faint spoked web with rings (a canvas texture painted once per felt colour), the webs a highlight.
+**Shape and type.** 8–14 px radii on cards, pads and dialogs; 1.5 px card borders (2.5 px under the runtime's high contrast); the system sans throughout. Cards are drawn by the UI exactly as the browser build's DOM cards were: an ivory face (`#fdfaf2`) with the rank top-left and the thread's glyph centred in the thread colour, a felt-coloured back, a striped felt stock with its "DEAL" label on the top packet (beside the pile when it does not fit), accent webs for cleared runs, dashed pads for empty columns. On the detailed looks the faces get a paper sheen and two-layer shadow, the backs a faint spoked web with rings (a canvas texture painted once per felt colour), the webs a highlight.
 
 **Motion.** A lifted run rises 4 px (not under reduced motion); bursts are quads with a 500 ms life (700 ms glowing additive sparks on the high particle looks), capped per look; motes drift and glint; the countdown runs 700 ms a beat. Under the runtime's **Reduced motion** the countdown is skipped, the lift does not move, motes freeze and no sparks fly.
 
@@ -201,7 +200,7 @@ Sparks (40 / 90 / 240 / 400) and motes (16 / 32 / 64 / 96) grow with the level w
 
 ## 9. Audio direction
 
-**Mix.** The runtime's buses (Options › Audio owns volumes, mute and the voice limit): music → `music`; effects and the ambience → `effects`. The old default bus levels (music 0.6, effects 0.8, ambience 0.4) are folded into each sound's gain. Audio starts with the first press in a browser (natively at once); clips load one at a time once the mixer runs, and a clip still loading is silent (the synthesized stand-ins are not ported). A hidden window stops the loops. Every cue also shows a caption ("♪ web complete!", the note drawn) for 1.6 s so nothing is audio-only.
+**Mix.** The runtime's buses (Options › Audio owns volumes, mute and the voice limit): music → `music`; effects and the ambience → `effects`. The old default bus levels (music 0.6, effects 0.8, ambience 0.4) are folded into each sound's gain. Audio starts with the first press in a browser (natively at once); clips load one at a time once the mixer runs, and a clip still loading is silent (the synthesized stand-ins are not ported). A hidden window stops the loops. Every cue also shows a caption ("♪ web complete!") for 1.6 s so nothing is audio-only.
 
 **Ambience.** `sfx/ambience-study.opus` (12 s study room tone) loops at 0.6 gain from the first press.
 
@@ -303,7 +302,7 @@ Layout: buttons are content-sized with 44 px minimums, button rows wrap, labels 
 - Custom seeds in Practice always use Single Thread.
 - The clock shows the time of the last move while paused (the session's existing behaviour).
 - Drags are not covered by the native play scripts (they cannot drag); the browser check drags a card.
-- Engine 1.16.5 workarounds: specular light under an orthographic camera follows the direction to the camera's position, so the camera stands 2,000 units up (100 units up put a highlight on the inlay; 20,000 units drew nothing); textures for `draw.box` go through registered styles (an inline style's `Texture` image is refused); the countdown digit is capped at 240 window pixels.
+- Engine workarounds (found on 1.16.5): specular light under an orthographic camera follows the direction to the camera's position, so the camera stands 2,000 units up (100 units up put a highlight on the inlay; 20,000 units drew nothing); textures for `draw.box` go through registered styles (an inline style's `Texture` image is refused). The camera one is re-checked on 1.17.0 and still applies.
 - The per-category graphics overrides, render scale and frame-rate controls of the old Graphics panel are the runtime's level choice and Options; the old volume and mute settings are not migrated into the runtime's.
 - A guest's browser-localStorage progress, history and saved round cannot migrate; signed-in progress does (cloud save).
 

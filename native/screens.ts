@@ -51,22 +51,15 @@ function textWidth(text: string, style: string | readonly string[], kind?: "butt
 }
 const buttonWidth = (text: string, style: readonly string[]): number => textWidth(text, style, "button") + 4;
 
-interface Btn { id: string; text: string; style?: string[]; disabled?: boolean; act: () => void; width?: number; glyph?: Glyph; tip?: string }
+interface Btn { id: string; text: string; style?: string[]; disabled?: boolean; act: () => void; width?: number; tip?: string }
 const PLAIN = ["btn"];
-/** A button `width` wide (null: its text's); a label too long for it wraps inside; a drawn glyph before its text. */
+/** A button `width` wide (null: its text's); a label too long for it wraps inside. */
 function button(b: Btn, width: number | null = null): void {
   const style = b.style ?? PLAIN;
   const opts: ui.ButtonOptions = {};
   if (b.disabled) opts.disabled = true;
   const s: ui.Style = width != null ? { width } : {};
-  const gw = b.glyph ? 22 : 0;
-  if (b.glyph) {
-    const fs = style.includes("btn-big") ? 19.2 : 16;
-    opts.content = () => ui.row(`${b.id}-face`, () => {
-      ui.widget("", { role: "none", size: { width: fs * 0.9, height: fs * 1.2 }, draw: (r, st) => glyph(b.glyph!, r.x + r.width / 2, r.y + r.height / 2, r.width * 0.9, st.colors.text) });
-      ui.style({ text: { color: "$on-accent" } }).label(b.text);
-    }, { spacing: 6, align: "center" });
-  } else if (width != null && buttonWidth(b.text, style) + gw > width) {
+  if (width != null && buttonWidth(b.text, style) > width) {
     const inner = Math.max(20, width - 32);
     opts.content = () => { ui.style({ text: { align: "center" } }).paragraph(b.text, inner); };
   }
@@ -78,7 +71,7 @@ function button(b: Btn, width: number | null = null): void {
 function flow(label: string, list: Btn[], width: number, align: "start" | "center" | "end" = "center", gap = 8): void {
   const rows: Btn[][] = [[]];
   let used = 0;
-  const bw = (b: Btn): number => Math.min(width, b.width ?? buttonWidth(b.text, b.style ?? PLAIN) + (b.glyph ? 22 : 0));
+  const bw = (b: Btn): number => Math.min(width, b.width ?? buttonWidth(b.text, b.style ?? PLAIN));
   for (const b of list) {
     const w = bw(b);
     if (rows[rows.length - 1]!.length && used + gap + w > width) { rows.push([]); used = 0; }
@@ -111,72 +104,6 @@ function ellipsize(text: string, width: number, cls: string): string {
 const keyName = (action: string): string => bindingLabel(action, "keyboard") || "—";
 const keyLabel = (action: string): string => keyName(action).replace(/^Arrow /, "").replace(/^Escape$/, "Esc");
 
-// ------------------------------------------------------------------ drawn glyphs (the old emoji and symbols)
-type Glyph = "play" | "check" | "star" | "web" | "medal" | "watch" | "note" | "menu";
-/** Draws a symbol the fonts may lack, centred on (cx, cy), about `s` window px across. */
-function glyph(g: Glyph, cx: number, cy: number, s: number, color: string): void {
-  const h = s / 2;
-  switch (g) {
-    case "play": draw.polygon([[cx - h * 0.7, cy - h * 0.8], [cx + h * 0.8, cy], [cx - h * 0.7, cy + h * 0.8]], color); break;
-    case "check": {
-      const w = Math.max(1.5, s * 0.14);
-      draw.line(cx - h * 0.6, cy, cx - h * 0.15, cy + h * 0.5, color, w);
-      draw.line(cx - h * 0.15, cy + h * 0.5, cx + h * 0.65, cy - h * 0.5, color, w);
-      break;
-    }
-    case "star": {
-      const pts: [number, number][] = [];
-      for (let i = 0; i < 10; i++) {
-        const a = -Math.PI / 2 + (i * Math.PI) / 5, r = i % 2 ? h * 0.42 : h;
-        pts.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r]);
-      }
-      draw.polygon(pts, color);
-      break;
-    }
-    case "web": {
-      const w = Math.max(1, s * 0.05);
-      for (let k = 0; k < 8; k++) { const a = (k * Math.PI) / 4; draw.line(cx, cy, cx + Math.cos(a) * h, cy + Math.sin(a) * h, color, w); }
-      for (const rr of [0.33, 0.62, 0.92]) {
-        for (let k = 0; k < 8; k++) {
-          const a0 = (k * Math.PI) / 4, a1 = ((k + 1) * Math.PI) / 4;
-          draw.line(cx + Math.cos(a0) * h * rr, cy + Math.sin(a0) * h * rr, cx + Math.cos(a1) * h * rr, cy + Math.sin(a1) * h * rr, color, w);
-        }
-      }
-      break;
-    }
-    case "medal":
-      draw.polygon([[cx - h * 0.5, cy - h], [cx - h * 0.1, cy - h], [cx + h * 0.15, cy - h * 0.1], [cx - h * 0.25, cy - h * 0.1]], "#2f80ed");
-      draw.polygon([[cx + h * 0.5, cy - h], [cx + h * 0.1, cy - h], [cx - h * 0.15, cy - h * 0.1], [cx + h * 0.25, cy - h * 0.1]], "#c0392b");
-      draw.circle(cx, cy + h * 0.35, h * 0.6, "#e3a72f");
-      draw.strokeCircle(cx, cy + h * 0.35, h * 0.42, "#b07a14", Math.max(1, s * 0.06));
-      break;
-    case "watch":
-      draw.strokeCircle(cx, cy + h * 0.12, h * 0.72, color, Math.max(1.2, s * 0.09));
-      draw.rect(cx - h * 0.2, cy - h * 0.98, h * 0.4, h * 0.2, color);
-      draw.line(cx, cy + h * 0.12, cx, cy - h * 0.35, color, Math.max(1.2, s * 0.08));
-      break;
-    case "note":
-      draw.ellipse(cx - h * 0.25, cy + h * 0.55, h * 0.32, h * 0.24, color, { rotation: -0.4 });
-      draw.line(cx + h * 0.05, cy + h * 0.5, cx + h * 0.05, cy - h * 0.85, color, Math.max(1, s * 0.09));
-      draw.line(cx + h * 0.05, cy - h * 0.85, cx + h * 0.5, cy - h * 0.45, color, Math.max(1, s * 0.09));
-      break;
-    case "menu":
-      for (const dy of [-0.55, 0, 0.55]) draw.rect(cx - h * 0.75, cy + dy * h - s * 0.05, h * 1.5, Math.max(1.5, s * 0.1), color);
-      break;
-  }
-}
-/** A thread's shape (●◆▲■), centred, `s` window px across. */
-function suitShape(kind: number, cx: number, cy: number, s: number, color: string): void {
-  const h = s / 2;
-  if (kind === 0) draw.circle(cx, cy, h * 0.92, color);
-  else if (kind === 1) draw.polygon([[cx, cy - h * 1.05], [cx + h * 0.82, cy], [cx, cy + h * 1.05], [cx - h * 0.82, cy]], color);
-  else if (kind === 2) draw.polygon([[cx, cy - h * 0.95], [cx + h * 1.02, cy + h * 0.8], [cx - h * 1.02, cy + h * 0.8]], color);
-  else draw.rect(cx - h * 0.82, cy - h * 0.82, h * 1.64, h * 1.64, color);
-}
-/** A widget showing a drawn glyph. */
-function glyphWidget(g: Glyph, size: number, color: string): void {
-  ui.widget("", { role: "none", size: { width: size, height: size }, draw: (r) => glyph(g, r.x + r.width / 2, r.y + r.height / 2, r.width, color) });
-}
 /** An image cover-fitted into a box with rounded corners (the felt colour while it loads). */
 function art(id: string, path: string, w: number, h: number, radius: number, shadow = true): void {
   const t = theme();
@@ -253,7 +180,7 @@ function titleScreen(L: Layout): void {
       art("title-art", "assets/key-art.webp", aw, ah, 12);
     }
     para(T("Weave descending runs of silk thread. Clear all eight webs."), w, "tagline", "tagline", true);
-    button({ id: "btn-play", text: T("▶ Play").replace(/^▶\s*/, ""), style: ["btn-primary", "btn-big"], glyph: "play", act: () => show("modes", "mode-0") });
+    button({ id: "btn-play", text: T("▶ Play"), style: ["btn-primary", "btn-big"], act: () => show("modes", "mode-0") });
     flow("title-row", [
       { id: "btn-daily", text: T("Daily Challenge"), act: startDaily },
       { id: "btn-journey", text: T("Journey"), act: () => show("journey", "stage-0") },
@@ -306,7 +233,7 @@ function modesScreen(L: Layout): void {
 }
 
 /** ui.js setupCard: the round's title, threads and clock, assists and ranked flag, its note, Start. */
-function setupCard(id: string, def: Def, w: number, badge: { text?: string; glyph?: Glyph } | null, locked: boolean, onStart: () => void): void {
+function setupCard(id: string, def: Def, w: number, badge: string | null, locked: boolean, onStart: () => void): void {
   const durMin = def.limits.timeMs ? Math.round(def.limits.timeMs / 60000) : null;
   const parts = [T(def.suits > 1 ? N("{n} threads") : N("{n} thread"), { n: def.suits }), durMin ? T("~{n} min clock", { n: durMin }) : T("untimed")];
   if (def.limits.moves) parts.push(T("≤{n} moves", { n: def.limits.moves }));
@@ -321,8 +248,7 @@ function setupCard(id: string, def: Def, w: number, badge: { text?: string; glyp
       role: "none", size: { width: 25.6, height: 25.6 },
       draw: (r) => {
         draw.circle(r.x + r.width / 2, r.y + r.height / 2, r.width / 2, locked ? mix(t.accent, t.panel, 0.5) : t.accent);
-        if (badge.glyph) glyph(badge.glyph, r.x + r.width / 2, r.y + r.height / 2, r.width * 0.55, "#ffffff");
-        else draw.text(badge.text ?? "", r.x + r.width / 2, r.y + r.height / 2 - 7.4 * pr().scale, { size: 12.8 * pr().scale, weight: "700", color: "#ffffff", align: "center" });
+        draw.text(badge, r.x + r.width / 2, r.y + r.height / 2 - 7.4 * pr().scale, { size: 12.8 * pr().scale, weight: "700", color: "#ffffff", align: "center" });
       },
     });
   };
@@ -344,7 +270,7 @@ function lessonsScreen(L: Layout): void {
   const progress = platform.progress();
   listScreen("lessons", L, T("Learn"), (w) => LESSONS.forEach((def: Def, i: number) => {
     const done = progress.lessonsDone[def.id];
-    setupCard(`lesson-${i}`, def, w, done ? { glyph: "check" } : { text: String(i + 1) }, false, () => startRound(def));
+    setupCard(`lesson-${i}`, def, w, done ? "✓" : String(i + 1), false, () => startRound(def));
   }));
 }
 function journeyScreen(L: Layout): void {
@@ -352,7 +278,7 @@ function journeyScreen(L: Layout): void {
   listScreen("journey", L, T("Journey"), (w) => JOURNEY.forEach((def: Def, i: number) => {
     const done = progress.journey[def.id];
     const prevDone = i === 0 || !!progress.journey[(JOURNEY[i - 1] as Def).id];
-    setupCard(`stage-${i}`, def, w, done ? { glyph: "check" } : def.goals?.mastery ? { glyph: "star" } : { text: String(i + 1) }, !prevDone, () => startRound(def));
+    setupCard(`stage-${i}`, def, w, done ? "✓" : def.goals?.mastery ? "★" : String(i + 1), !prevDone, () => startRound(def));
   }));
 }
 function challengesScreen(L: Layout): void {
@@ -443,21 +369,14 @@ function topBar(L: Layout): number {
   const h = L.short ? 40 : 44;
   const r = ui.place("top-bar", { anchor: "top-start", x: 0, y: 0 }, () => {
     ui.row("top-row", () => {
-      const t = theme();
-      const res = ui.style("btn", "icon-btn").id("btn-menu").widget(T("Pause menu"), {
-        role: "button", size: { width: 44, height: 44 },
-        draw: (q) => glyph("menu", q.x + q.width / 2, q.y + q.height / 2, 18 * pr().scale, t.ink),
-      });
-      if (res.activated) showPause();
-      const cw = ck.text ? textWidth(ck.text, ck.urgent ? "top-clock-urgent" : "top-clock") + (ck.timed ? 22 : 0) : 0;
+      if (ui.style("btn", "icon-btn").id("btn-menu").button(T("Pause menu"), { content: () => ui.label("☰") })) showPause();
+      const clock = ck.timed ? `⏱ ${ck.text}` : ck.text;
+      const cw = ck.text ? textWidth(clock, ck.urgent ? "top-clock-urgent" : "top-clock") : 0;
       const tw = Math.max(40, L.lw - 20 - 44 - cw - 20);
       ui.style("top-title").id("top-title").label(ellipsize(def ? defTitle(def) : "", tw, "top-title"));
       ui.spacer();
       if (ck.text) {
-        ui.row("clock", () => {
-          if (ck.timed) glyphWidget("watch", 15, ck.urgent ? t.danger : t.ink);
-          ui.style(ck.urgent ? "top-clock-urgent" : "top-clock").id("top-clock").label(ck.text);
-        }, { spacing: 5, align: "center" });
+        ui.style(ck.urgent ? "top-clock-urgent" : "top-clock").id("top-clock").label(clock);
       }
     }, { width: L.lw - 20, height: h, align: "center", spacing: 10 });
   }, { style: "top-bar", width: L.lw });
@@ -665,7 +584,8 @@ function board(Lt: TableLayout, x0: number, y0: number, L: Layout): void {
             background: detailed ? [{ type: "radial", center: { x: 0.4, y: 0.3 }, radius: "closest-side", shape: "circle", stops: ["#ffffff59", "#ffffff00"] }, t.accent] : t.accent,
             radius: 8, border: { width: 1, color: t.rule }, ...(detailed ? { shadow: { y: 2, blur: 8, color: "#0000004d" } } : {}),
           });
-          glyph("web", q.x + q.width / 2, q.y + q.height / 2, Math.min(q.width, q.height) * 0.62, "#ffffff");
+          const fs = Math.min(q.width, q.height) * 0.5;
+          draw.text("🕸", q.x + q.width / 2, q.y + q.height / 2 - fs * 0.62, { size: fs, align: "center", color: "#ffffff" });
         },
       }));
     }
@@ -703,7 +623,7 @@ function board(Lt: TableLayout, x0: number, y0: number, L: Layout): void {
             if (cd.u) {
               const suit = S[cd.s]!;
               draw.text(rankLabel(cd.r), q.x + q.width * 0.07, q.y + 2 * k, { size: rankSize * k, weight: "700", color: suit.color });
-              suitShape(cd.s % 4, q.x + q.width / 2, q.y + q.height / 2, glyphSize * 0.66 * k, suit.color);
+              draw.text(suit.glyph, q.x + q.width / 2, q.y + q.height / 2 - glyphSize * 0.62 * k, { size: glyphSize * k, color: suit.color, align: "center" });
             }
             if (lifted) draw.strokeRoundRect(q.x - 3 * k, q.y - 3 * k, q.width + 6 * k, q.height + 6 * k, 10 * k, t.select, 3 * k);
             else if (hinted) dashedRect(q.x - 3 * k, q.y - 3 * k, q.width + 6 * k, q.height + 6 * k, t.accent, 3 * k, 7 * k);
@@ -732,15 +652,13 @@ function board(Lt: TableLayout, x0: number, y0: number, L: Layout): void {
 function countdownOverlay(L: Layout): void {
   const f = frame();
   draw.rect(0, 0, f.width, f.height, "#0a0a1059");
-  // Workaround (engine 1.16.4 web, reported by the discovery-merge port): a glyph taller than about 256
-  // window pixels is left out of the overlay, so the countdown is capped at 240 window pixels.
-  const size = Math.min(Math.max(64, Math.min(L.lw * 0.2, 144)), 240 / L.sc);
+  const size = Math.max(64, Math.min(L.lw * 0.2, 144));
   ui.place("countdown", { anchor: "center", x: 0, y: 0 }, () => ui.style("countdown", { text: { size } }).id("countdown").label(String(app.countdown!.n)));
 }
 
 // ------------------------------------------------------------------ dialogs
 /** A modal card: a scrolling body when taller than the window, a pinned footer (its buttons stay clickable). */
-function dialogFrame(id: string, title: string, L: Layout, build: ((w: number) => void) | null, footer: (w: number) => void, onClose: (() => void) | null, titleGlyph: Glyph | null = null, focus: string | null = null): void {
+function dialogFrame(id: string, title: string, L: Layout, build: ((w: number) => void) | null, footer: (w: number) => void, onClose: (() => void) | null, titlePrefix = "", focus: string | null = null): void {
   const w = Math.min(560, L.lw * 0.94) - 44 - 32;
   const fh = (lastHeight.get(`dlg-${id}-foot`) ?? 56) + 12;
   const avail = Math.max(80, L.lh * 0.88 - 38 - fh - 40);
@@ -748,9 +666,9 @@ function dialogFrame(id: string, title: string, L: Layout, build: ((w: number) =
   const body = (): void => {
     const r = ui.column(`${id}-body`, () => {
       ui.row(`${id}-title`, () => {
-        if (titleGlyph) glyphWidget(titleGlyph, 26, theme().ink);
-        if (textWidth(title, "h2", "heading") <= w - (titleGlyph ? 34 : 0)) ui.style("h2").id(`${id}-h`).heading(title);
-        else ui.style("h2").paragraph(title, w - (titleGlyph ? 34 : 0));
+        const head = titlePrefix + title;
+        if (textWidth(head, "h2", "heading") <= w) ui.style("h2").id(`${id}-h`).heading(head);
+        else ui.style("h2").paragraph(head, w);
       }, { spacing: 8, align: "center" });
       build?.(w);
     }, { spacing: 8.8, width: w });
@@ -783,10 +701,10 @@ function dialogs(L: Layout): void {
           { id: "btn-giveup", text: T("Give up"), style: ["btn-danger"], act: giveUp },
           { id: "btn-leave", text: T("Leave to title"), act: leaveRound },
         ], w);
-      }, resumeRound, null, "btn-resume-round");
+      }, resumeRound, "", "btn-resume-round");
       return;
     case "settings":
-      dialogFrame("settings", T("Settings"), L, settingsSection, (w) => button({ id: "btn-close", text: T("Close"), style: ["btn-primary"], act: closeModal }, w), closeModal, null, "btn-options");
+      dialogFrame("settings", T("Settings"), L, settingsSection, (w) => button({ id: "btn-close", text: T("Close"), style: ["btn-primary"], act: closeModal }, w), closeModal, "", "btn-options");
       return;
     case "results": resultsDialog(L); return;
     default:
@@ -843,7 +761,7 @@ function resultsDialog(L: Layout): void {
     if (lb) para(lb, w, "dim", "results-lb");
     for (const k of newly) {
       const a = ACHIEVEMENTS.find((q: { key: string }) => q.key === k) as { name: string; desc: string } | undefined;
-      ui.row(`ach-${k}`, () => { glyphWidget("medal", 20, "#000000"); para(`${a ? T(a.name) : k} — ${a ? T(a.desc) : ""}`, w - 50, "body"); }, { style: "achievement", width: w, spacing: 8, align: "center" });
+      ui.row(`ach-${k}`, () => { para(`🏅 ${a ? T(a.name) : k} — ${a ? T(a.desc) : ""}`, w - 24, "body"); }, { style: "achievement", width: w, spacing: 8, align: "center" });
     }
   }, (w) => {
     const next = nextRecommended();
@@ -855,7 +773,7 @@ function resultsDialog(L: Layout): void {
     // Short windows: the three in a row, so the score keeps the room.
     if (L.short) flow("results-actions", list, w);
     else for (const b of list) button(b, w);
-  }, null, won ? "web" : null, "btn-retry");
+  }, null, won ? "🕸 " : "", "btn-retry");
 }
 
 // ------------------------------------------------------------------ toasts and captions
@@ -872,10 +790,8 @@ function toasts(L: Layout): void {
 function caption(L: Layout): void {
   const c = app.caption;
   if (!c) return;
-  const t = theme();
   ui.place("caption", { anchor: "bottom", y: 64 }, () => ui.row("caption-row", () => {
-    glyphWidget("note", 12, t.ink + "b3");
-    ui.style("caption").id("caption").label(c.text);
+    ui.style("caption").id("caption").label(`♪ ${c.text}`);
   }, { spacing: 3, align: "center" }));
   void L;
 }

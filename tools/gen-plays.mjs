@@ -159,7 +159,7 @@ const out = {};
   weave(d, 400);
   if (d.s.state.terminalReason !== 'move-limit') throw new Error(`move diet ended ${d.s.state.status}/${d.s.state.terminalReason}`);
   out['challenge-move-diet.play'] = [...header('Challenge: Move Diet played by keyboard (lifts, drops and deals) to its 200-move budget and the results.'),
-    'until 300 Eight Webs', 'frames 120', 'click =Play', 'until 60 Choose a mode', 'frames 10', 'click =Challenge', 'until 60 Move Diet',
+    'until 300 Eight Webs', 'frames 120', 'click =▶ Play', 'until 60 Choose a mode', 'frames 10', 'click =Challenge', 'until 60 Move Diet',
     'frames 10', 'click =Start #2', 'until 60 Move Diet', 'frames 160', 'save move-diet-start', ...d.lines,
     'until 300 The weave holds', 'frames 30', 'expect move limit reached', 'save move-diet-results', 'click =Title', 'until 120 Eight Webs'];
 }

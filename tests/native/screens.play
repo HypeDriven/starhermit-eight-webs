@@ -5,7 +5,7 @@ until 300 Eight Webs
 frames 150
 expect Journey 0/40
 save title
-click =Play
+click =▶ Play
 until 60 Choose a mode
 frames 5
 save modes

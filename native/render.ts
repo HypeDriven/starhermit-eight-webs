@@ -46,7 +46,7 @@ export interface Theme {
 // -- renderer, camera and lights (js/render.js init / buildLights) ------------------------------
 renderer.toneMapping = ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
-// Workaround (engine 1.16.5): specular light under an orthographic camera follows the direction to the
+// Workaround (engine 1.16.5, still in 1.17.0): specular light under an orthographic camera follows the direction to the
 // camera's position (three.js takes the view axis), so a camera 100 px above the felt put a bright
 // highlight on the brass inlay. Far away, the direction is all but the view axis again.
 const CAM_Z = 2000;

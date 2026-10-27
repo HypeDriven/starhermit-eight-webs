@@ -8,21 +8,24 @@ const unescape = (s) => s.replace(/\\(['"\\])/g, '$1');
 
 export function sourceKeys() {
   const keys = new Set();
-  // T('…'), N('…'), tr('…') (gfx summary), tx(tag, cls, '…') and this.button('…');
+  // T("…") / N("…") in the engine client (native/*.ts) and T('…') / N('…') in js/;
   // ternary keys are wrapped in N() at the call site.
   const patterns = [
-    /(?<![\w.$])(?:T|N|tr)\(\s*'((?:[^'\\\n]|\\.)*)'/g,
-    /(?<![\w.$])tx\([^,()]+,\s*[^,()]+,\s*'((?:[^'\\\n]|\\.)*)'/g,
-    /\bbutton\(\s*'((?:[^'\\\n]|\\.)+)'/g,
-    /\bmodal\(\s*'((?:[^'\\\n]|\\.)+)'/g,
-    /\bdataset\.i18n(?:Aria)? = '((?:[^'\\\n]|\\.)+)'/g,
+    /(?<![\w.$])(?:T|N)\(\s*'((?:[^'\\\n]|\\.)*)'/g,
+    /(?<![\w.$])(?:T|N)\(\s*"((?:[^"\\\n]|\\.)*)"/g,
   ];
-  for (const f of readdirSync(join(ROOT, 'js'))) {
-    if (!f.endsWith('.js') || f === 'i18n.js') continue;
-    const src = readFileSync(join(ROOT, 'js', f), 'utf8');
+  const files = [
+    ...readdirSync(join(ROOT, 'js')).filter((f) => f.endsWith('.js') && f !== 'i18n.js').map((f) => join(ROOT, 'js', f)),
+    ...readdirSync(join(ROOT, 'native')).filter((f) => f.endsWith('.ts')).map((f) => join(ROOT, 'native', f)),
+  ];
+  for (const file of files) {
+    const src = readFileSync(file, 'utf8');
     for (const re of patterns) for (const m of src.matchAll(re)) keys.add(unescape(m[1]));
-    // Audio captions (ui.caption translates them).
-    if (f === 'audio.js') for (const m of src.matchAll(/this\.caption\('([^']+)'\)/g)) keys.add(m[1]);
+    // Sound captions (main.ts translates them where they are shown).
+    if (file.endsWith('audio.ts')) {
+      const block = src.slice(src.indexOf('export const CAPTIONS'), src.indexOf('};', src.indexOf('export const CAPTIONS')));
+      for (const m of block.matchAll(/:\s*"([^"]+)"/g)) keys.add(m[1]);
+    }
   }
   return keys;
 }

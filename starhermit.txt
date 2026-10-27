@@ -1,9 +1,25 @@
 name=Eight Webs
 description=Build descending same-suit card runs from King to Ace and clear all eight in this spider solitaire puzzle.
-launch=index.html
 owner=2712e04e-461b-4d23-81ae-e40b429128a8
 server=score-script.js
 cover=cover.jpg
+
+# StarHermit engine script game: one package, played natively by the
+# StarHermit client and in browsers by the engine's web runtime. Browsers open
+# launch=index.html, the loader `npm run package` writes (it pins the engine
+# on wiki.starhermit.com by hash; never edit it). Re-run `npm run package`
+# after every change and commit index.html + starhermit-files.json.
+launch=index.html
+engine.api=1
+engine.entry=native/main.ts
+engine.version=1.16.5
+engine.minor=18
+engine.capabilities=platform,storage,clipboard
+
+# Keyboard controls (players rebind keys and pads in the runtime's Options).
+# The table is also played with the pointer or touch: tap a face-up card to
+# lift its run, tap a destination column (or drag the run there), tap the
+# stock to deal; the tray has Undo, Hint and Deal, the top bar the pause menu.
 control.left=ArrowLeft | Move focus left
 control.right=ArrowRight | Move focus right
 control.up=ArrowUp | Move focus up
@@ -13,3 +29,18 @@ control.deal=KeyD | Deal
 control.hint=KeyH | Hint
 control.undo=KeyU | Undo
 control.pause=Escape | Cancel / pause
+engine.group.left=Card focus
+engine.group.confirm=Round
+
+# Gamepad defaults (the browser build's pad mapping, with pads for the tray's
+# actions): D-pad or left stick moves focus, A lifts or drops, B sets a run
+# down or pauses, Start pauses, X deals, Y hints, LB undoes.
+engine.gamepad.left=DpadLeft+LeftStickLeft
+engine.gamepad.right=DpadRight+LeftStickRight
+engine.gamepad.up=DpadUp+LeftStickUp
+engine.gamepad.down=DpadDown+LeftStickDown
+engine.gamepad.confirm=South
+engine.gamepad.deal=West
+engine.gamepad.hint=North
+engine.gamepad.undo=LeftShoulder
+engine.gamepad.pause=East+Start

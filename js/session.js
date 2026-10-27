@@ -16,6 +16,14 @@ export const MACHINE_STATES = [
 
 const AUTOSAVE_KEY = 'eightwebs:autosave';
 
+// The session's clock in ms. Browsers default to performance.now(); the
+// engine client points it at the runtime's fixed steps (native/main.ts), so
+// round clocks and time limits advance with the simulation and play scripts
+// replay exactly.
+export const clock = {
+  now: () => (typeof performance !== 'undefined' ? performance.now() : Date.now()),
+};
+
 export class Session {
   constructor(platform, emit) {
     this.platform = platform;   // persistence + hosted adapter
@@ -49,7 +57,7 @@ export class Session {
   // --- clock ---------------------------------------------------------------
   nowMs() {
     if (this.machine !== 'active' && this.machine !== 'resolving') return this.state?.elapsedMs ?? 0;
-    return this.pauseAccum + (performance.now() - this.startStamp);
+    return this.pauseAccum + (clock.now() - this.startStamp);
   }
 
   // --- round lifecycle -----------------------------------------------------
@@ -68,7 +76,7 @@ export class Session {
   }
 
   beginActive() {
-    this.startStamp = performance.now();
+    this.startStamp = clock.now();
     this.pauseAccum = this.state?.elapsedMs ?? 0;
     this.transition('active', 'countdown-complete');
   }
@@ -77,14 +85,14 @@ export class Session {
     if (this.machine !== 'active' && this.machine !== 'tutorial') return;
     this.pausedFrom = this.machine; // resume returns to the state we left
     this.pauseAccum = this.nowMs();
-    this.pauseStart = performance.now();
+    this.pauseStart = clock.now();
     this.transition('paused', reason);
     this.saveSnapshot();
   }
 
   resume() {
     if (this.machine !== 'paused' && this.machine !== 'reconnecting') return;
-    this.startStamp = performance.now();
+    this.startStamp = clock.now();
     const back = this.pausedFrom === 'tutorial' ? 'tutorial' : 'active';
     this.pausedFrom = null;
     this.transition(back, `resume:${this.machineReason}`);

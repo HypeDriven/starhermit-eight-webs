@@ -1,0 +1,98 @@
+# Every screen from the title and back: the modes, Learn, Journey (locked stages), Challenges, Practice
+# (a custom seed started, paused, left to the title, then resumed as the saved round), Scores & History,
+# How to play, Settings (the theme and the colour-vision palette changed), Escape backing out of lists.
+until 300 Eight Webs
+frames 150
+expect Journey 0/40
+save title
+click =Play
+until 60 Choose a mode
+frames 5
+save modes
+click =Journey
+until 60 First Threads
+frames 5
+expect Long Runs
+save journey
+key Escape 1
+until 60 Choose a mode
+frames 5
+click =Challenge
+until 60 Silk Sprint
+frames 5
+expect Grand Loom
+save challenges
+click =← Back
+until 60 Choose a mode
+frames 5
+click =Scores
+until 60 Scores & History
+expect No completed rounds yet.
+expect No daily wins yet today.
+save scores
+click =← Back
+until 60 Choose a mode
+frames 5
+click =Practice
+until 60 Full Loom
+frames 5
+key Tab 1
+frames 3
+key Tab 1
+frames 3
+key Tab 1
+frames 3
+type silk-42
+frames 5
+save practice
+key Tab 1
+frames 3
+key Enter 1
+until 120 Practice — Single Thread
+frames 160
+save practice-round
+key Escape 1
+until 60 Leave to title
+frames 10
+save pause
+click =Leave to title
+until 120 Resume saved round
+frames 10
+click =Resume saved round
+until 60 Round restored from your last safe snapshot.
+frames 10
+click =Resume
+frames 30
+save resumed
+key Escape 1
+until 60 Leave to title
+frames 10
+click =Help #2
+until 60 How to play
+frames 5
+expect Threads travel together
+save help
+click =← Back
+until 60 Leave to title
+frames 10
+click =Give up
+until 120 Round abandoned
+frames 10
+click =Title
+until 120 Eight Webs
+frames 5
+click =Settings
+until 60 Color-vision palette
+frames 10
+save settings
+click =Close
+frames 10
+click =Help
+until 60 How to play
+frames 5
+key Escape 1
+until 60 Choose a mode
+frames 5
+key Escape 1
+until 60 Daily Challenge
+frames 5

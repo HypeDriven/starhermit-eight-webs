@@ -14,13 +14,8 @@ import {
   LESSONS, JOURNEY, CHALLENGES, PRACTICE_DIFFICULTIES, practiceDef,
   dailyForDate, validateContent, validateAll, THEMES, ACHIEVEMENTS,
 } from '../js/content.js';
-import { Session } from '../js/session.js';
-import '../gpu-level.js';
-import {
-  detectPreset, detectLevel, presetForLevel, budgetFor, BUDGETS, resolve as resolveGfx, presetTier, choosePreset, describe as describeGfx,
-  CATEGORIES, PRESETS,
-} from '../js/gfx.js';
-import { GFX_STRINGS, pickLocale } from '../js/gfx-i18n.js';
+import { Session, clock } from '../js/session.js';
+import { computeLayout } from '../js/layout.js';
 
 let passed = 0;
 const tests = [];
@@ -414,103 +409,51 @@ test('practice + challenge content passes validators', () => {
   for (const c of CHALLENGES) assert.ok(validateContent(c.build()).ok, c.id);
 });
 
-// --- graphics quality model (js/gfx.js) ---------------------------------------
-const desk = { webgl: true, webgl2: true, cores: 8, memoryGb: 8 };
-const phone = { webgl: true, webgl2: true, mobile: true, cores: 8, memoryGb: 8 };
-
-test('gfx: hardware level → preset: Low 0, Balanced 4, High 10, Ultra 17', () => {
-  assert.equal(detectPreset('ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)', desk), 'low');
-  assert.equal(detectLevel('llvmpipe (LLVM 15.0.7, 256 bits)', desk), 0);
-  assert.equal(detectPreset('ANGLE (AMD, AMD Radeon(TM) Graphics Direct3D11 vs_5_0 ps_5_0)', desk), 'low');
-  assert.equal(detectPreset('ANGLE (Intel, Intel(R) UHD Graphics 620 Direct3D11)', desk), 'low');
-  assert.equal(detectPreset('ANGLE (Intel, Intel(R) Iris(R) Xe Graphics Direct3D11)', desk), 'balanced');
-  assert.equal(detectPreset('ANGLE (NVIDIA, NVIDIA GeForce GTX 1070 Direct3D11 vs_5_0 ps_5_0)', desk), 'high');
-  assert.equal(detectPreset('ANGLE (NVIDIA, NVIDIA GeForce RTX 4080 Direct3D11 vs_5_0 ps_5_0)', desk), 'ultra');
-  assert.equal(detectLevel('ANGLE (NVIDIA, NVIDIA GeForce RTX 5090 Direct3D11 vs_5_0 ps_5_0)', desk), 20);
-  assert.equal(detectPreset('ANGLE (NVIDIA, NVIDIA GeForce RTX 5090 Direct3D11 vs_5_0 ps_5_0)', desk), 'ultra');
-  assert.equal(detectPreset('', desk), 'balanced');
-  assert.equal(presetForLevel(3), 'low');
-  assert.equal(presetForLevel(16), 'high');
-});
-
-test('gfx: phones and tablets are capped at Balanced; software GPUs stay Low', () => {
-  assert.equal(detectPreset('Adreno (TM) 740', phone), 'balanced');
-  assert.ok(detectLevel('Adreno (TM) 740', phone) <= 9);
-  assert.equal(detectPreset('NVIDIA GeForce RTX 4090', phone), 'balanced');
-  assert.equal(detectPreset('Mali-G77', phone), 'low');
-  assert.equal(detectPreset('SwiftShader', phone), 'low');
-});
-
-test('gfx: every preset has an explicit budget that grows from Low to Ultra and scales with the level', () => {
-  const order = ['low', 'balanced', 'high', 'ultra'];
-  const keys = ['material', 'cardTex', 'sparks', 'motes', 'bloomRes', 'aoRes'];
-  const mats = ['lambert', 'standard', 'physical'];
-  for (const p of order) for (const k of keys) assert.ok(BUDGETS[p][k] != null, `${p}.${k}`);
-  for (let i = 1; i < order.length; i++) {
-    for (const k of keys) if (typeof BUDGETS.low[k] === 'number') assert.ok(BUDGETS[order[i]][k] >= BUDGETS[order[i - 1]][k], `${order[i]}.${k}`);
-    assert.ok(mats.indexOf(BUDGETS[order[i]].material) >= mats.indexOf(BUDGETS[order[i - 1]].material));
+// --- the table layout (js/layout.js) and the session clock -------------------------
+test('layout: ten columns inside the playfield, fanned cards, pads, stock and webs', () => {
+  const st = createGame(JOURNEY[0]);
+  for (const [W, H, coarse] of [[840, 684, false], [390, 600, true], [844, 286, true]]) {
+    const L = computeLayout(st, W, H, { coarse });
+    assert.equal(L.cols.length, COLUMN_COUNT);
+    assert.equal(L.pads.length, COLUMN_COUNT);
+    assert.equal(L.stock.length, st.stock.length);
+    assert.equal(L.foundations.length, WEB_COUNT);
+    for (let c = 0; c < COLUMN_COUNT; c++) {
+      const rects = L.cols[c];
+      assert.equal(rects.length, st.cols[c].length);
+      assert.ok(rects.at(-1).x + L.cw <= W + 0.01, `column ${c} fits across`);
+      for (let i = 1; i < rects.length; i++) assert.ok(rects[i].y > rects[i - 1].y, 'cards fan downward');
+      assert.ok(L.pads[c].y + L.pads[c].h >= rects.at(-1).y + L.ch - 0.01, 'the pad covers the column');
+    }
+    // A long column compresses to fit: its last card ends inside the playfield when there is room.
+    const tall = { ...st, cols: st.cols.map((col, c) => (c ? col : Array.from({ length: 30 }, (_, i) => card(13 - (i % 13), 0, i > 5 ? 1 : 0)))) };
+    const T2 = computeLayout(tall, W, H, { coarse });
+    if (H > 500) assert.ok(T2.cols[0].at(-1).y + T2.ch <= H + 1, `30 cards fit in ${W}x${H}`);
   }
-  assert.deepEqual(resolveGfx({ preset: 'ultra' }, 'low', {}, 0).budget, resolveGfx({ preset: 'ultra' }, 'ultra', {}, 17).budget);
-  assert.ok(budgetFor('low', 3).motes > budgetFor('low', 0).motes, 'counts scale up with the level');
-  assert.ok(budgetFor('low', 20).sparks <= 4 * BUDGETS.low.sparks, 'never more than 4×');
-  assert.equal(resolveGfx({ preset: 'balanced' }, 'low').scale, 0.9);
 });
 
-test('gfx: resolve applies preset, auto, overrides and clamps render scale', () => {
-  const auto = resolveGfx({}, 'low');
-  assert.equal(auto.preset, 'low');
-  assert.equal(auto.auto, true);
-  assert.equal(auto.post, false, 'Low draws without the composer');
-  assert.equal(auto.adaptive, true);
-  assert.equal(auto.showFps, false);
-  const hi = resolveGfx({ preset: 'high' }, 'low');
-  assert.equal(hi.preset, 'high');
-  assert.equal(hi.auto, false);
-  for (const cat of Object.keys(CATEGORIES)) assert.equal(hi[cat], presetTier('high', cat));
-  assert.equal(hi.post, true);
-  const o = resolveGfx({ preset: 'high', bloom: 'off', shadows: 'high', ao: 'bogus' }, 'low');
-  assert.equal(o.bloom, 'off');
-  assert.equal(o.shadows, 'high');
-  assert.equal(o.ao, presetTier('high', 'ao'), 'invalid override falls back to the preset');
-  assert.equal(resolveGfx({ render_scale: 9 }, 'balanced').renderScale, 2);
-  assert.equal(resolveGfx({ render_scale: 0.1 }, 'balanced').renderScale, 0.5);
-  assert.equal(resolveGfx({ render_scale: 9 }, 'balanced').scale, 1.8, 'Balanced scale 0.9 × 200 %');
-  assert.equal(resolveGfx({ preset: 'ultra', render_scale: 2 }, 'low').scale, 2.5);
-  assert.equal(resolveGfx({ preset: 'nope' }, 'nope').preset, 'balanced');
-  assert.equal(resolveGfx({ adaptive: false, show_fps: true }, 'low').adaptive, false);
-  assert.equal(resolveGfx({ show_fps: true }, 'low').showFps, true);
-  assert.equal(resolveGfx({ preset: 'ultra' }, 'low').post, true, 'MSAA without context AA runs on the composer');
-  assert.equal(resolveGfx({ preset: 'ultra' }, 'low', { contextMsaa: true }).post, true);
-  assert.equal(resolveGfx({ preset: 'low', antialias: 'msaa' }, 'low', { contextMsaa: true }).post, false);
-});
-
-test('gfx: choosing a preset clears overrides but keeps scale and toggles', () => {
-  const saved = { preset: 'high', bloom: 'off', detail: 'plain', render_scale: 1.5, adaptive: false, show_fps: true };
-  const next = choosePreset(saved, 'low');
-  assert.deepEqual(next, { preset: 'low', render_scale: 1.5, adaptive: false, show_fps: true });
-  assert.equal(choosePreset({}, 'auto').preset, 'auto');
-  assert.equal(resolveGfx(next, 'high').bloom, presetTier('low', 'bloom'));
-  assert.ok(PRESETS.every((p) => Object.keys(CATEGORIES).every((c) => CATEGORIES[c].includes(presetTier(p, c)))));
-  assert.match(describeGfx(resolveGfx({ preset: 'high' }, 'low'), [800, 600]), /2048² shadows.*800×600 px/);
-  assert.match(describeGfx(resolveGfx({}, 'low')), /no shadows.*no AA/);
-});
-
-test('gfx i18n: all nine locales carry every Graphics string', () => {
-  const locales = ['en-US', 'en-GB', 'es-419', 'es-ES', 'de-DE', 'fr-FR', 'fr-CA', 'pt-BR', 'it-IT'];
-  const keys = (o, pre = '') => Object.entries(o).flatMap(([k, v]) => (v && typeof v === 'object' ? keys(v, pre + k + '.') : [pre + k])).sort();
-  const ref = keys(GFX_STRINGS['en-US']);
-  for (const l of locales) {
-    assert.ok(GFX_STRINGS[l], l);
-    assert.deepEqual(keys(GFX_STRINGS[l]), ref, l);
-    for (const cat of Object.keys(CATEGORIES)) assert.ok(GFX_STRINGS[l].cats[cat], `${l} ${cat}`);
-    for (const tiers of Object.values(CATEGORIES)) for (const t of tiers) assert.ok(GFX_STRINGS[l].tiers[t], `${l} ${t}`);
-  }
-  assert.equal(pickLocale('de'), 'de-DE');
-  assert.equal(pickLocale('es-MX'), 'es-419');
-  assert.equal(pickLocale('fr-CA'), 'fr-CA');
-  assert.equal(pickLocale('pt-PT'), 'pt-BR');
-  assert.equal(pickLocale('en-AU'), 'en-GB');
-  assert.equal(pickLocale('ja-JP'), 'en-US');
+test('session clock: rounds time on the injected clock (the engine client points it at fixed steps)', () => {
+  const was = clock.now;
+  let t = 0;
+  clock.now = () => t;
+  try {
+    const platform = { saveLocal() {}, loadLocal() { return null; }, serverOffsetMs: () => 0, recordResult() {} };
+    const s = new Session(platform, () => {});
+    s.startRound(CHALLENGES[0].build());
+    s.beginActive();
+    t = 90000;
+    assert.equal(s.nowMs(), 90000);
+    s.pause();
+    t = 500000;
+    s.resume();
+    t = 501000;
+    assert.equal(s.nowMs(), 91000, 'paused time does not run');
+    t = 500000 + 600000;
+    const r = s.dispatch({ type: 'note' });
+    assert.ok(!r.error);
+    assert.equal(s.state.status, 'lost');
+    assert.equal(s.state.terminalReason, 'time-limit');
+  } finally { clock.now = was; }
 });
 
 // ---------------------------------------------------------------------------

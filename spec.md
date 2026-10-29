@@ -11,7 +11,7 @@ Present-tense description of the shipped game. Every statement below is true of 
 | Genre | Single-player card sequencing puzzle (Spider-family patience with authored progression) |
 | Players | 1; local scores, history and a per-device daily board |
 | Session length | Learn lesson 1–2 min; Journey/Practice/Daily round 10–40 min; Challenges 10–25 min |
-| Platforms | StarHermit engine script game (engine 1.24.0, host API 1.21): natively in the StarHermit client and in desktop and mobile browsers through the engine's web runtime |
+| Platforms | StarHermit engine script game (engine 1.26.1, host API 1.28): natively in the StarHermit client and in desktop and mobile browsers through the engine's web runtime |
 | Rendering | `starhermit:scene` orthographic "shadow-box" table under the card layer drawn with `starhermit:ui` (cards, stock, webs and pads are accessible widgets), both from one layout model |
 | Entry | `native/main.ts` (`engine.entry`); browsers open the engine's loader `index.html` (`launch`); platform script `score-script.js` (`server=`) |
 
@@ -19,7 +19,7 @@ Present-tense description of the shipped game. Every statement below is true of 
 
 | Path | Responsibility |
 |---|---|
-| `starhermit.txt` | Manifest: name, description, owner, `server=score-script.js`, cover, `launch=index.html`, `engine.api=1`, `engine.entry=native/main.ts`, `engine.version=1.24.0`, `engine.minor=19`, capabilities `platform,storage,clipboard`, `control.*` and `engine.gamepad.*` for every action |
+| `starhermit.txt` | Manifest: name, description, owner, `server=score-script.js`, cover, `launch=index.html`, `engine.api=1`, `engine.entry=native/main.ts`, `engine.version=1.26.1`, `engine.minor=28`, capabilities `platform,storage,clipboard`, `control.*` and `engine.gamepad.*` for every action |
 | `native/main.ts` | Entry: the round controller (screens and dialogs state, round lifecycle with the saved round, selection, card cursor, drags, Deal/Undo/Hint, the clock, event presentation, progression, achievements, history, score posting, lifecycle), all on the runtime's fixed steps |
 | `native/screens.ts` | Every screen, the HUD, the card layer, dialogs, toasts and captions on `starhermit:ui`; symbols and emoji (▶ ✓ ★ 🕸 🏅 ⏱ ♪ ☰ and the thread glyphs ●◆▲■) are plain text, drawn by the engine's fonts and built-in emoji |
 | `native/render.ts` | The 3D table (`starhermit:scene`): felt, frame, inlay, corner webs, motes, sparks, lights, post chain per look |
@@ -183,7 +183,7 @@ Danger is `#c0392b` (`#eb5757` on Midnight). Threads: Crimson `#c0392b` ●, Amb
 
 **Motion.** A lifted run rises 4 px (not under reduced motion); bursts are quads with a 500 ms life (700 ms glowing additive sparks on the high particle looks), capped per look; motes drift and glint; the countdown runs 700 ms a beat. Under the runtime's **Reduced motion** the countdown is skipped, the lift does not move, motes freeze and no sparks fly.
 
-**Graphics.** The table is lit by a warm key directional light from the upper left (2.0/π in the engine's convention), a hemisphere fill (1.1/π) and an ambient term (0.25/π), with ACES filmic tone mapping. The felt is the baked fibre texture (colour and bump), the frame rails show their wood-grain lip inside the playfield edge and throw a thin shadow, a brass inlay runs along it and faint silk webs fill the two lower corners. The runtime's Options › Graphics choose the level (Auto from the device, render scale, frame-rate limit and readout, adaptive resolution); `native/quality.ts` maps its tier and level to the browser build's presets:
+**Graphics.** The table is lit by a warm key directional light from the upper left (2.0, the browser build's three r185 intensities), a hemisphere fill (1.1) and an ambient term (0.25), with ACES filmic tone mapping. The felt is the baked fibre texture (colour and bump), the frame rails show their wood-grain lip inside the playfield edge and throw a thin shadow, a brass inlay runs along it and faint silk webs fill the two lower corners. The runtime's Options › Graphics choose the level (Auto from the device, render scale, frame-rate limit and readout, adaptive resolution); `native/quality.ts` maps its tier and level to the browser build's presets:
 
 | Look (tier) | Shadows | AO | Bloom / grade | AA | Reflections | Particles | Motes | Detail | Materials |
 |---|---|---|---|---|---|---|---|---|---|

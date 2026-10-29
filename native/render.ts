@@ -51,11 +51,11 @@ renderer.toneMappingExposure = 1.0;
 // highlight on the brass inlay. Far away, the direction is all but the view axis again.
 const CAM_Z = 2000;
 const camera = new OrthographicCamera(-1, 1, 1, -1, 1, CAM_Z + 300);
-const keyLight = new DirectionalLight(0xfff0dc, 2.0 / PI); // warm key from the upper left
+const keyLight = new DirectionalLight(0xfff0dc, 2.0); // warm key from the upper left
 keyLight.shadow.bias = -0.0004;
 keyLight.shadow.radius = 3;
-const fillLight = new HemisphereLight(0xfff6e8, 0x2a2119, 1.1 / PI); // sky/ground fill
-const ambLight = new AmbientLight(0xbfc8e0, 0.25 / PI);
+const fillLight = new HemisphereLight(0xfff6e8, 0x2a2119, 1.1); // sky/ground fill
+const ambLight = new AmbientLight(0xbfc8e0, 0.25);
 scene.add(keyLight, keyLight.target, fillLight, ambLight);
 const env = new Group();
 const fxGroup = new Group();
@@ -104,7 +104,11 @@ function spriteTexture(): Texture {
 let envTex: Texture | null = null;
 function envMap(): Texture | null {
   if (!envTex) {
-    try { envTex = new PMREMGenerator(renderer).fromScene(new RoomEnvironment(renderer), 0.04).texture; }
+    try {
+      const room = new RoomEnvironment(renderer);
+      room.position.y = -3.5; // three.js r183+ lowers the room
+      envTex = new PMREMGenerator(renderer).fromScene(room, 0.04).texture;
+    }
     catch (e) { console.warn(`environment: ${e instanceof Error ? e.message : String(e)}`); }
   }
   return envTex;
@@ -231,7 +235,9 @@ function fitLights(): void {
   const cx = view.w / 2, cy = -view.h / 2;
   keyLight.target.position.set(cx, cy, 0);
   keyLight.position.set(cx - 0.35 * 150, cy + 0.55 * 150, 150);
-  keyLight.shadow.distance = Math.hypot(view.w, view.h) + 400;
+  const r = Math.hypot(view.w, view.h) / 2 + 24;
+  Object.assign(keyLight.shadow.camera, { left: -r, right: r, top: r, bottom: -r, near: 1, far: 400 });
+  keyLight.shadow.camera.updateProjectionMatrix();
 }
 function frameCamera(): void {
   // The view spans the window: its centre, in the playfield's coordinates.

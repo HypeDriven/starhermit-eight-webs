@@ -394,12 +394,12 @@ export function applyLook(next: Look): void {
     denoise: { lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: next.ao === "high" ? 6 : 4, rings: 2, samples: next.ao === "high" ? 16 : 8, radiusExponent: 2 },
   };
   // A high threshold: only glints, sparks and highlights bloom (UnrealBloomPass 0.6, 0.45, 0.9).
-  // minor 29 bloom follows r185's UnrealBloomPass; this page ran three r185 (r177+), so its strength is kept.
+  // r185 bloom (the default model); this page ran three r185 (r177+), so its strength is kept.
   renderer.bloom = next.bloom ? { strength: 0.6, radius: 0.45, threshold: 0.9, resolution: next.budget.bloomRes } : null;
   // js/render.js GradeShader (before OutputPass, so on linear light): a gentle S-curve, a touch more
   // saturation, warm highlights / cool shadows and the 0.28 vignette.
   renderer.grade = next.grade ? {
-    space: "linear", contrast: 0.18, saturation: 1.08,
+    space: "linear", contrastCurve: "s", contrast: 0.18, saturation: 1.08,
     shadows: [0.97, 0.98, 1.04], highlights: [1.04, 1.0, 0.95], split: [0.2, 0.8],
     vignette: { amount: 0.28, inner: 0.3, outer: 0.8, scale: [1, 0.9] },
     overRange: "keep", // minor 29: mix(c, s + max(c - 1, 0), amount) as the page's grade

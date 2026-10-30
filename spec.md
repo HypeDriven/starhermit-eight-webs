@@ -11,7 +11,7 @@ Present-tense description of the shipped game. Every statement below is true of 
 | Genre | Single-player card sequencing puzzle (Spider-family patience with authored progression) |
 | Players | 1; local scores, history and a per-device daily board |
 | Session length | Learn lesson 1–2 min; Journey/Practice/Daily round 10–40 min; Challenges 10–25 min |
-| Platforms | StarHermit engine script game (engine 1.26.1, host API 1.28): natively in the StarHermit client and in desktop and mobile browsers through the engine's web runtime |
+| Platforms | StarHermit engine script game (engine 1.27.0, host API 1.29): natively in the StarHermit client and in desktop and mobile browsers through the engine's web runtime |
 | Rendering | `starhermit:scene` orthographic "shadow-box" table under the card layer drawn with `starhermit:ui` (cards, stock, webs and pads are accessible widgets), both from one layout model |
 | Entry | `native/main.ts` (`engine.entry`); browsers open the engine's loader `index.html` (`launch`); platform script `score-script.js` (`server=`) |
 
@@ -19,7 +19,7 @@ Present-tense description of the shipped game. Every statement below is true of 
 
 | Path | Responsibility |
 |---|---|
-| `starhermit.txt` | Manifest: name, description, owner, `server=score-script.js`, cover, `launch=index.html`, `engine.api=1`, `engine.entry=native/main.ts`, `engine.version=1.26.1`, `engine.minor=28`, capabilities `platform,storage,clipboard`, `control.*` and `engine.gamepad.*` for every action |
+| `starhermit.txt` | Manifest: name, description, owner, `server=score-script.js`, cover, `launch=index.html`, `engine.api=1`, `engine.entry=native/main.ts`, `engine.version=1.27.0`, `engine.minor=29`, capabilities `platform,storage,clipboard`, `control.*` and `engine.gamepad.*` for every action |
 | `native/main.ts` | Entry: the round controller (screens and dialogs state, round lifecycle with the saved round, selection, card cursor, drags, Deal/Undo/Hint, the clock, event presentation, progression, achievements, history, score posting, lifecycle), all on the runtime's fixed steps |
 | `native/screens.ts` | Every screen, the HUD, the card layer, dialogs, toasts and captions on `starhermit:ui`; symbols and emoji (▶ ✓ ★ 🕸 🏅 ⏱ ♪ ☰ and the thread glyphs ●◆▲■) are plain text, drawn by the engine's fonts and built-in emoji |
 | `native/render.ts` | The 3D table (`starhermit:scene`): felt, frame, inlay, corner webs, motes, sparks, lights, post chain per look |
@@ -192,7 +192,7 @@ Danger is `#c0392b` (`#eb5757` on Midnight). Threads: Crimson `#c0392b` ●, Amb
 | High | 2048 | on | on | SMAA | on | glowing | animated | detailed | Physical frame (clear coat) |
 | Ultra | 4096 | high | on | MSAA | on | glowing | animated | detailed | Physical frame |
 
-Sparks (40 / 90 / 240 / 400) and motes (16 / 32 / 64 / 96) grow with the level within a tier (×1.64 a level, ≤ 4×, capped at 120 sparks on Low and 600 / 256 overall). Reflections are a PMREM-filtered `RoomEnvironment(renderer)` per material (felt 0.12, frame 0.45, inlay 1.0); bloom threshold 0.9; the grade is the old GradeShader in display space (slight S-curve, saturation 1.08, warm highlights / cool shadows, 0.28 vignette). Gameplay is identical on every look.
+Sparks (40 / 90 / 240 / 400) and motes (16 / 32 / 64 / 96) grow with the level within a tier (×1.64 a level, ≤ 4×, capped at 120 sparks on Low and 600 / 256 overall). Reflections are a PMREM-filtered `RoomEnvironment(renderer)` per material (felt 0.12, frame 0.45, inlay 1.0); bloom threshold 0.9; the grade is the old GradeShader on linear light before output, over-range light kept (slight S-curve, saturation 1.08, warm highlights / cool shadows, 0.28 vignette). Gameplay is identical on every look.
 
 **Hero.** The table. Key art appears only on the title (`assets/key-art.webp`) and the results modal (`results-win.webp` for a win, `results-over.webp` for a loss/abandon); both are decorative, drawn cover-fitted with the felt colour behind them; they are hidden on windows ≤ 500 px tall.
 

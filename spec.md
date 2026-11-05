@@ -23,7 +23,7 @@ Present-tense description of the shipped game. Every statement below is true of 
 | `native/main.ts` | Entry: the round controller (screens and dialogs state, round lifecycle with the saved round, selection, card cursor, drags, Deal/Undo/Hint, the clock, event presentation, progression, achievements, history, score posting, lifecycle), all on the runtime's fixed steps |
 | `native/screens.ts` | Every screen, the HUD, the card layer, dialogs, toasts and captions on `starhermit:ui`; symbols and emoji (▶ ✓ ★ 🕸 🏅 ⏱ ♪ ☰ and the thread glyphs ●◆▲■) are plain text, drawn by the engine's fonts and built-in emoji |
 | `native/render.ts` | The 3D table (`starhermit:scene`): felt, frame, inlay, corner webs, motes, sparks, lights, post chain per look |
-| `native/quality.ts` | The browser build's presets and budgets keyed by the runtime's quality tier and level |
+| `native/quality.ts` | The engine level's effects (`levelSettings()`) plus the browser build's art and budgets keyed by the runtime's quality tier |
 | `native/audio.ts` | Clips, room tone, music bed and rendered plucks on the runtime's buses; captions |
 | `native/platform.ts` | Save (progress document), cloud-save migration and merge, device storage, game options and their migration, player, invite link, platform clock, score posting |
 | `native/style.ts`, `native/i18n.ts` | Style sheet + per-theme tokens; locale from the runtime's interface language |
@@ -183,16 +183,16 @@ Danger is `#c0392b` (`#eb5757` on Midnight). Threads: Crimson `#c0392b` ●, Amb
 
 **Motion.** A lifted run rises 4 px (not under reduced motion); bursts are quads with a 500 ms life (700 ms glowing additive sparks on the high particle looks), capped per look; motes drift and glint; the countdown runs 700 ms a beat. Under the runtime's **Reduced motion** the countdown is skipped, the lift does not move, motes freeze and no sparks fly.
 
-**Graphics.** The table is lit by a warm key directional light from the upper left (2.0, the browser build's three r185 intensities), a hemisphere fill (1.1) and an ambient term (0.25), with ACES filmic tone mapping. The felt is the baked fibre texture (colour and bump), the frame rails show their wood-grain lip inside the playfield edge and throw a thin shadow, a brass inlay runs along it and faint silk webs fill the two lower corners. The runtime's Options › Graphics choose the level (Auto from the device, render scale, frame-rate limit and readout, adaptive resolution); `native/quality.ts` maps its tier and level to the browser build's presets:
+**Graphics.** The table is lit by a warm key directional light from the upper left (2.0, the browser build's three r185 intensities), a hemisphere fill (1.1) and an ambient term (0.25), with ACES filmic tone mapping. The felt is the baked fibre texture (colour and bump), the frame rails show their wood-grain lip inside the playfield edge and throw a thin shadow, a brass inlay runs along it and faint silk webs fill the two lower corners. The runtime's Options › Graphics choose the level (Auto from the device, render scale, frame-rate limit and readout, adaptive resolution); `native/quality.ts` takes the engine-owned effects from the level (`levelSettings()`: shadows and the key light's map size, AO resolution and samples, bloom resolution, grade, anti-aliasing) and the art from its quality tier; the table shows the anchor levels (quantum, molecular, terrestrial, galactic), the levels between take their own effects (e.g. atomic FXAA and the grade, planetary and stellar 4096 shadows):
 
 | Look (tier) | Shadows | AO | Bloom / grade | AA | Reflections | Particles | Motes | Detail | Materials |
 |---|---|---|---|---|---|---|---|---|---|
 | Low | off | off | off | off | off | small squares | still | plain | Lambert |
-| Balanced | 1024 | off | on | FXAA | on | glowing | animated | detailed | Standard |
-| High | 2048 | on | on | SMAA | on | glowing | animated | detailed | Physical frame (clear coat) |
-| Ultra | 4096 | high | on | MSAA | on | glowing | animated | detailed | Physical frame |
+| Balanced | 1024 | off | on (½-res bloom) | FXAA | on | glowing | animated | detailed | Standard |
+| High | 2048 | ½-res, 8 samples | on (½-res bloom) | SMAA | on | glowing | animated | detailed | Physical frame (clear coat) |
+| Ultra | 4096 | full-res, 16 samples | on | MSAA | on | glowing | animated | detailed | Physical frame |
 
-Sparks (40 / 90 / 240 / 400) and motes (16 / 32 / 64 / 96) grow with the level within a tier (×1.64 a level, ≤ 4×, capped at 120 sparks on Low and 600 / 256 overall). Reflections are a PMREM-filtered `RoomEnvironment(renderer)` per material (felt 0.12, frame 0.45, inlay 1.0); bloom threshold 0.9; the grade is the old GradeShader on linear light before output, over-range light kept (slight S-curve, saturation 1.08, warm highlights / cool shadows, 0.28 vignette). Gameplay is identical on every look.
+Sparks (40 / 90 / 240 / 400) and motes (16 / 32 / 64 / 96) grow with the level's particle budget over the tier's anchor (×2 a level, ≤ 4×, capped at 120 sparks on Low and 600 / 256 overall). Reflections are a PMREM-filtered `RoomEnvironment(renderer)` per material (felt 0.12, frame 0.45, inlay 1.0); bloom threshold 0.9; the grade is the old GradeShader on linear light before output, over-range light kept (slight S-curve, saturation 1.08, warm highlights / cool shadows, 0.28 vignette). Gameplay is identical on every look.
 
 **Hero.** The table. Key art appears only on the title (`assets/key-art.webp`) and the results modal (`results-win.webp` for a win, `results-over.webp` for a loss/abandon); both are decorative, drawn cover-fitted with the felt colour behind them; they are hidden on windows ≤ 500 px tall.
 
@@ -267,7 +267,7 @@ Layout: buttons are content-sized with 44 px minimums, button rows wrap, labels 
 ## 13. Technical architecture
 
 - **Layering**: `js/rules.js` (pure) ← `js/content.js` ← `js/session.js` ← `native/main.ts` (controller) → `screens.ts` (UI), `render.ts` (table), `audio.ts`, `platform.ts`. Rules never import engine modules; the table and sound consume snapshots and events only.
-- **Frame**: `onFixedUpdate` (60 Hz) advances the session clock, the countdown, the hint timer, the one-minute warning and the authoritative time-out (a `note` command when a clock runs out), and the sparks; `onUpdate` picks the look from `frame().quality`/`levelIndex`, pumps audio and expires toasts; `onRender` builds the UI (screens, card layer, dialogs), then decides queued pointer presses (drags) against that frame's layout, then moves the motes.
+- **Frame**: `onFixedUpdate` (60 Hz) advances the session clock, the countdown, the hint timer, the one-minute warning and the authoritative time-out (a `note` command when a clock runs out), and the sparks; `onUpdate` picks the look from the frame's level (`levelSettings(frame().level)`), pumps audio and expires toasts; `onRender` builds the UI (screens, card layer, dialogs), then decides queued pointer presses (drags) against that frame's layout, then moves the motes.
 - **Determinism**: the session clock is the fixed steps, so a play script replays exactly; three seeded streams — rules (`deck:<seed>`), decor (`decor:*`), audio (`audio:variants`).
 - **Renderer**: an orthographic camera spans the window in logical pixels with the playfield's corner at the world origin (layout y negated), so the felt and frame sit exactly behind the card layer; the camera stands 2,000 units above the table (see Known limitations). Textures are baked PNGs; the card backs and stock stripes are canvas textures painted once per felt colour and used through registered styles.
 - **Lifecycle**: a hidden window pauses the round (opening the pause dialog), saves the snapshot and flushes the save; quitting saves the snapshot.

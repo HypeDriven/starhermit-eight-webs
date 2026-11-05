@@ -69,20 +69,9 @@ function button(b: Btn, width: number | null = null): void {
 }
 /** Buttons at their own widths in rows that wrap at `width` (CSS flex-wrap). */
 function flow(label: string, list: Btn[], width: number, align: "start" | "center" | "end" = "center", gap = 8): void {
-  const rows: Btn[][] = [[]];
-  let used = 0;
-  const bw = (b: Btn): number => Math.min(width, b.width ?? buttonWidth(b.text, b.style ?? PLAIN));
-  for (const b of list) {
-    const w = bw(b);
-    if (rows[rows.length - 1]!.length && used + gap + w > width) { rows.push([]); used = 0; }
-    used += (rows[rows.length - 1]!.length ? gap : 0) + w;
-    rows[rows.length - 1]!.push(b);
-  }
-  ui.column(label, () => {
-    rows.forEach((row, ri) => ui.row(`${label}-r${ri}`, () => {
-      for (const b of row) button(b, b.width ?? (bw(b) >= width ? width : null));
-    }, { spacing: gap, align: "center" }));
-  }, { spacing: gap, align, width });
+  ui.row(label, () => {
+    for (const b of list) button(b, b.width ?? (buttonWidth(b.text, b.style ?? PLAIN) >= width ? width : null));
+  }, { wrap: true, width, gap, justify: align, align: "center" });
 }
 /** Text up to `width` wide: one label when it fits, else a paragraph. */
 function para(text: string, width: number, cls = "body", id?: string, center = false): void {
@@ -93,13 +82,6 @@ function para(text: string, width: number, cls = "body", id?: string, center = f
   if (id) u = u.id(id);
   if (ui.measureText(text, { style: styles }).width / pr().scale <= width) u.label(text);
   else u.paragraph(text, width);
-}
-/** Cuts a single line to fit `width` with an ellipsis (CSS text-overflow). */
-function ellipsize(text: string, width: number, cls: string): string {
-  if (textWidth(text, cls) <= width) return text;
-  let s = text;
-  while (s.length > 1 && textWidth(s + "…", cls) > width) s = s.slice(0, -1);
-  return s.trimEnd() + "…";
 }
 const keyName = (action: string): string => bindingLabel(action, "keyboard") || "—";
 const keyLabel = (action: string): string => keyName(action).replace(/^Arrow /, "").replace(/^Escape$/, "Esc");
@@ -372,8 +354,13 @@ function topBar(L: Layout): number {
       if (ui.style("btn", "icon-btn").id("btn-menu").button(T("Pause menu"), { content: () => ui.label("☰") })) showPause();
       const clock = ck.timed ? `⏱ ${ck.text}` : ck.text;
       const cw = ck.text ? textWidth(clock, ck.urgent ? "top-clock-urgent" : "top-clock") : 0;
-      const tw = Math.max(40, L.lw - 20 - 44 - cw - 20);
-      ui.style("top-title").id("top-title").label(ellipsize(def ? defTitle(def) : "", tw, "top-title"));
+      // The row's room less the menu button, the clock and the three 10 px gaps (button, title, spacer, clock).
+      const tw = Math.max(40, L.lw - 20 - 44 - cw - 30);
+      // Too wide: one line cut to `tw` by the engine's ellipsis (CSS text-overflow); the full title stays
+      // the accessible name. (A style width is the label's width, so a title that fits keeps its own.)
+      const title = def ? defTitle(def) : "";
+      const fits = textWidth(title, "top-title") <= tw;
+      ui.style("top-title", ...(fits ? [] : [{ width: tw, text: { overflow: "ellipsis" as const } }])).id("top-title").label(title);
       ui.spacer();
       if (ck.text) {
         ui.style(ck.urgent ? "top-clock-urgent" : "top-clock").id("top-clock").label(clock);

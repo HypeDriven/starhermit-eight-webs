@@ -46,10 +46,9 @@ export interface Theme {
 // -- renderer, camera and lights (js/render.js init / buildLights) ------------------------------
 renderer.toneMapping = ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
-// Workaround (engine 1.16.5, still in 1.24.0): specular light under an orthographic camera follows the direction to the
-// camera's position (three.js takes the view axis), so a camera 100 px above the felt put a bright
-// highlight on the brass inlay. Far away, the direction is all but the view axis again.
-const CAM_Z = 2000;
+// The camera sits 100 px above the felt (the scene spans z -8 to 20). Specular light under an
+// orthographic camera follows the view axis (fixed in the engine; re-checked on 1.36.1).
+const CAM_Z = 100;
 const camera = new OrthographicCamera(-1, 1, 1, -1, 1, CAM_Z + 300);
 const keyLight = new DirectionalLight(0xfff0dc, 2.0); // warm key from the upper left
 keyLight.shadow.bias = -0.0004;
@@ -387,15 +386,17 @@ export function applyLook(next: Look): void {
   const shadows = next.shadows > 0;
   renderer.shadowMap.enabled = shadows;
   keyLight.castShadow = shadows;
-  if (shadows) keyLight.shadow.mapSize = next.shadows;
+  if (shadows) keyLight.shadow.mapSize = next.shadows; // the level's size: the runtime keeps a game's mapSize
   keyLight.shadow.radius = next.shadows >= 4096 ? 4 : next.shadows >= 2048 ? 3 : 2;
-  renderer.ao = next.ao === "off" ? null : {
-    blendIntensity: 0.75, radius: 14, distanceExponent: 1.2, thickness: 12, scale: 1.2, samples: next.ao === "high" ? 16 : 8, resolution: next.budget.aoRes,
-    denoise: { lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: next.ao === "high" ? 6 : 4, rings: 2, samples: next.ao === "high" ? 16 : 8, radiusExponent: 2 },
+  // The level's AO resolution and samples; full resolution is the engine's "high" (the wider denoise).
+  const ao = next.ao, full = !!ao && ao.resolution >= 1;
+  renderer.ao = ao && {
+    blendIntensity: 0.75, radius: 14, distanceExponent: 1.2, thickness: 12, scale: 1.2, samples: ao.samples, resolution: ao.resolution,
+    denoise: { lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: full ? 6 : 4, rings: 2, samples: ao.denoiseSamples, radiusExponent: 2 },
   };
   // A high threshold: only glints, sparks and highlights bloom (UnrealBloomPass 0.6, 0.45, 0.9).
   // r185 bloom (the default model); this page ran three r185 (r177+), so its strength is kept.
-  renderer.bloom = next.bloom ? { strength: 0.6, radius: 0.45, threshold: 0.9, resolution: next.budget.bloomRes } : null;
+  renderer.bloom = next.bloom !== null ? { strength: 0.6, radius: 0.45, threshold: 0.9, resolution: next.bloom } : null;
   // js/render.js GradeShader (before OutputPass, so on linear light): a gentle S-curve, a touch more
   // saturation, warm highlights / cool shadows and the 0.28 vignette.
   renderer.grade = next.grade ? {

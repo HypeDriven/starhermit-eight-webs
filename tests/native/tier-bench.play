@@ -1,0 +1,234 @@
+# Graphics-tier bench (tools/engine-tier-bench.mjs): Journey stage 1 (First
+# Threads, a fixed deal; the moves journey-stage.play makes), settled, then
+# the opening moves measured with their card motion and sparks.
+until 300 Eight Webs
+frames 120
+click =Journey
+until 60 First Threads
+frames 10
+click =Start
+until 60 First Threads
+frames 160
+frames 120
+measure start
+key ArrowDown 1
+frames 2
+key ArrowRight 1
+frames 2
+key Enter 1
+frames 2
+key ArrowLeft 1
+frames 2
+key ArrowLeft 1
+frames 2
+key ArrowLeft 1
+frames 2
+key Enter 1
+frames 2
+key ArrowRight 1
+frames 2
+key ArrowRight 1
+frames 2
+key ArrowRight 1
+frames 2
+key ArrowRight 1
+frames 2
+key ArrowRight 1
+frames 2
+key ArrowDown 1
+frames 2
+key Enter 1
+frames 2
+key ArrowLeft 1
+frames 2
+key Enter 1
+frames 2
+key ArrowRight 1
+frames 2
+key ArrowRight 1
+frames 2
+key ArrowRight 1
+frames 2
+key Enter 1
+frames 2
+key ArrowLeft 1
+frames 2
+key ArrowLeft 1
+frames 2
+key Enter 1
+frames 2
+key ArrowLeft 1
+frames 2
+key ArrowLeft 1
+frames 2
+key ArrowLeft 1
+frames 2
+key ArrowDown 1
+frames 2
+key Enter 1
+frames 2
+key ArrowRight 1
+frames 2
+key ArrowRight 1
+frames 2
+key ArrowRight 1
+frames 2
+key ArrowRight 1
+frames 2
+key ArrowRight 1
+frames 2
+key Enter 1
+frames 2
+key Enter 1
+frames 2
+key ArrowRight 1
+frames 2
+key ArrowRight 1
+frames 2
+key ArrowRight 1
+frames 2
+key ArrowRight 1
+frames 2
+key ArrowRight 1
+frames 2
+key ArrowDown 1
+frames 2
+key Enter 1
+frames 2
+key ArrowRight 1
+frames 2
+key Enter 1
+frames 2
+key ArrowRight 1
+frames 2
+key ArrowRight 1
+frames 2
+key ArrowRight 1
+frames 2
+key ArrowRight 1
+frames 2
+key Enter 1
+frames 2
+key ArrowLeft 1
+frames 2
+key ArrowLeft 1
+frames 2
+key ArrowLeft 1
+frames 2
+key ArrowLeft 1
+frames 2
+key ArrowDown 1
+frames 2
+key Enter 1
+frames 2
+key ArrowRight 1
+frames 2
+key ArrowRight 1
+frames 2
+key ArrowRight 1
+frames 2
+key ArrowRight 1
+frames 2
+key ArrowRight 1
+frames 2
+key ArrowDown 1
+frames 2
+key Enter 1
+frames 2
+key ArrowRight 1
+frames 2
+key ArrowRight 1
+frames 2
+key ArrowRight 1
+frames 2
+key ArrowRight 1
+frames 2
+key ArrowRight 1
+frames 2
+key Enter 1
+frames 2
+key ArrowLeft 1
+frames 2
+key ArrowLeft 1
+frames 2
+key ArrowDown 1
+frames 2
+key ArrowDown 1
+frames 2
+key Enter 1
+frames 2
+key ArrowRight 1
+frames 2
+key ArrowRight 1
+frames 2
+key Enter 1
+frames 2
+key ArrowRight 1
+frames 2
+key ArrowRight 1
+frames 2
+key ArrowRight 1
+frames 2
+key ArrowRight 1
+frames 2
+key ArrowDown 1
+frames 2
+key ArrowDown 1
+frames 2
+key Enter 1
+frames 2
+key ArrowLeft 1
+frames 2
+key ArrowDown 1
+frames 2
+key Enter 1
+frames 2
+key ArrowLeft 1
+frames 2
+key ArrowLeft 1
+frames 2
+key ArrowLeft 1
+frames 2
+key Enter 1
+frames 2
+key ArrowRight 1
+frames 2
+key ArrowDown 1
+frames 2
+key ArrowDown 1
+frames 2
+key ArrowDown 1
+frames 2
+key ArrowDown 1
+frames 2
+key ArrowDown 1
+frames 2
+key Enter 1
+frames 2
+key ArrowRight 1
+frames 2
+key ArrowRight 1
+frames 2
+key Enter 1
+frames 2
+key ArrowLeft 1
+frames 2
+key ArrowLeft 1
+frames 2
+key ArrowDown 1
+frames 2
+key Enter 1
+frames 2
+key ArrowRight 1
+frames 2
+key ArrowRight 1
+frames 2
+key ArrowRight 1
+frames 2
+key ArrowRight 1
+frames 2
+key ArrowDown 1
+frames 2
+key Enter 1
+frames 200
+measure stop

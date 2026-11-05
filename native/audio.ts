@@ -15,8 +15,9 @@
 // played while a clip decoded (and its tap / miss mp3 samples) are not
 // ported (a live synthesis graph makes clip loads fail on the engine's web
 // runtime; the arrow-exodus port's finding), so a clip still loading is
-// silent. Clips load once the mixer runs (natively at once, in a browser
-// after the first press), one at a time.
+// silent. Every clip loads at once in onStart (the engine hands each loaded
+// clip to the mixer, natively and on the web); the loops and the plucks
+// start once the mixer runs (in a browser, after the first press).
 import { context, createClip, loadClip, play as playClip, type AudioClip, type Sound } from "starhermit:audio";
 import { createStream } from "../js/rules.js";
 
@@ -41,23 +42,17 @@ const AMBIENCE = "ambience-study";
 const MUSIC = "music-gameplay";
 
 const clips = new Map<string, AudioClip>();
-const queue: string[] = [];
-let loading = false;
-let wantClips = false;
 let suspended = false;
 let captionHook: ((text: string) => void) | null = null;
 /** fn(text) for each cue's caption (the UI shows it for 1.6 s). */
 export function onCaption(fn: (text: string) => void): void { captionHook = fn; }
 
-function load(name: string): void { if (!queue.includes(name) && !clips.has(name)) queue.push(name); }
-function pump(): void {
-  if (loading || !queue.length) return;
-  const name = queue.shift()!;
-  loading = true;
-  loadClip(`sfx/${name}.opus`).then((c) => { clips.set(name, c); loading = false; }, (e: unknown) => { console.warn(`sfx ${name}: ${String(e)}`); loading = false; });
+/** Loads every clip at once (onStart); a cue whose clip is still loading is silent. */
+export function loadSfx(): void {
+  for (const name of new Set([AMBIENCE, MUSIC, ...Object.values(SAMPLES)])) {
+    loadClip(`sfx/${name}.opus`).then((c) => { clips.set(name, c); }, (e: unknown) => console.warn(`sfx ${name}: ${String(e)}`));
+  }
 }
-/** Asks for the clips; they load once the mixer runs (see update). */
-export function loadSfx(): void { wantClips = true; }
 
 /** Plays a cue's sample (once loaded) and shows its caption. */
 export function cue(name: Cue): void {
@@ -67,7 +62,7 @@ export function cue(name: Cue): void {
   const clip = clips.get(file);
   if (!clip || suspended) return;
   try { playClip(clip, { bus: "effects", gain: LEVEL.effects }); }
-  catch { clips.delete(file); load(file); } // a clip the mixer lost: load it again
+  catch { /* the mixer is full this frame: skip it */ }
 }
 
 // -- the beds and the adaptive plucks ----------------------------------------------------------
@@ -104,24 +99,14 @@ export function setSuspended(on: boolean): void {
   }
 }
 
-/** Each frame: the clips once the mixer runs (one at a time), the pluck notes rendered one each 0.3 s after them,
- * the two loops (in separate frames), then the plucks' beats by mixer time. */
+/** Each frame once the mixer runs: the two loops (in separate frames), the pluck notes rendered one each 0.3 s,
+ * then the plucks' beats by mixer time. */
 export function update(): void {
-  if (context.state !== "running") return;
-  if (wantClips) {
-    wantClips = false;
-    load(AMBIENCE);
-    load(MUSIC);
-    for (const name of Object.values(SAMPLES)) load(name);
-    return;
-  }
-  pump();
-  if (suspended) return;
+  if (context.state !== "running" || suspended) return;
   try {
     const amb = clips.get(AMBIENCE), mus = clips.get(MUSIC);
     if (amb && !ambience) { ambience = playClip(amb, { bus: "effects", gain: 0.6 * LEVEL.ambience, loop: true }); return; }
     if (mus && !bed && ambience) { bed = playClip(mus, { bus: "music", gain: 0.35 * LEVEL.music, loop: true }); return; }
-    if (loading || queue.length) return;
     if (context.currentTime >= nextRender && plucks.size < SCALE.length * 2) {
       const i = plucks.size;
       plucks.set(i, pluckClip(SCALE[i % SCALE.length]! * (i >= SCALE.length ? 2 : 1)));

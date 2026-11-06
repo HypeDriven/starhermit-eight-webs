@@ -47,7 +47,7 @@ export interface Theme {
 renderer.toneMapping = ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
 // The camera sits 100 px above the felt (the scene spans z -8 to 20). Specular light under an
-// orthographic camera follows the view axis (fixed in the engine; re-checked on 1.36.2).
+// orthographic camera follows the view axis (fixed in the engine; re-checked on 1.38.0).
 const CAM_Z = 100;
 const camera = new OrthographicCamera(-1, 1, 1, -1, 1, CAM_Z + 300);
 const keyLight = new DirectionalLight(0xfff0dc, 2.0); // warm key from the upper left

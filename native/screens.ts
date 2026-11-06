@@ -16,7 +16,7 @@
 // table), compact (rails hidden, as the old CSS hid them), short landscape
 // (≤ 500 px tall: slimmer bars, no key art); the left-handed option reverses
 // the tray.
-import { frame, openMenu } from "starhermit:engine";
+import { frame, openMenu, strings } from "starhermit:engine";
 import { bindingLabel, requestRebind } from "starhermit:input";
 import * as draw from "starhermit:draw";
 import * as ui from "starhermit:ui";
@@ -37,12 +37,10 @@ import { CanvasTexture, SRGBColorSpace, type Texture } from "starhermit:scene";
 // ------------------------------------------------------------------ layout
 interface Layout { lw: number; lh: number; sc: number; ox: number; oy: number; wide: boolean; phone: boolean; short: boolean }
 function layoutNow(): Layout {
-  const f = frame();
-  const sc = ui.preferences().scale;
-  const sa = f.safeArea;
-  const lw = Math.max(1, (f.width - sa.left - sa.right) / sc), lh = Math.max(1, (f.height - sa.top - sa.bottom) / sc);
+  const v = ui.viewport!();
+  const lw = Math.max(1, v.width), lh = Math.max(1, v.height);
   const short = lw > lh && lh <= 500;
-  return { lw, lh, sc, ox: sa.left / sc, oy: sa.top / sc, wide: lw >= 1024 && !short, phone: lw < 560, short };
+  return { lw, lh, sc: v.scale, ox: v.x, oy: v.y, wide: lw >= 1024 && !short, phone: lw < 560, short };
 }
 const lastHeight = new Map<string, number>();
 const pr = (): ui.UiPreferences => ui.preferences();
@@ -117,7 +115,6 @@ export function drawScreens(): void {
   }
   dialogs(L);
   if (app.countdown && app.screen === "play") countdownOverlay(L);
-  toasts(L);
   caption(L);
   if (app.focusNext && !app.modal) {
     const age = f.frame - app.openedFrame;
@@ -175,8 +172,8 @@ function titleScreen(L: Layout): void {
     para(T("Journey {done}/{total} · Webs cleared {webs}", { done: Object.keys(progress.journey).length, total: JOURNEY.length, webs: progress.websCleared }), w, "progress-line", "title-progress", true);
     const status = statusLine();
     const plat: Btn[] = [];
-    if (!platform.signedIn()) plat.push({ id: "btn-signin", text: T("Sign in with StarHermit"), act: signIn });
-    if (platform.inviteLink()) plat.push({ id: "btn-invite", text: T("Invite a friend"), act: copyInvite });
+    if (!platform.signedIn()) plat.push({ id: "btn-signin", text: strings.t("starhermit.signIn"), act: signIn });
+    if (platform.inviteLink()) plat.push({ id: "btn-invite", text: strings.t("starhermit.invite"), act: copyInvite });
     if (status) para(status, w, "progress-line", "title-status", true);
     if (plat.length) flow("title-platform", plat, w);
   });
@@ -764,16 +761,8 @@ function resultsDialog(L: Layout): void {
 }
 
 // ------------------------------------------------------------------ toasts and captions
-function toasts(L: Layout): void {
-  if (!app.toasts.length) return;
-  const w = Math.min(520, L.lw * 0.9);
-  ui.place("toast-root", { anchor: "bottom", y: L.lh * 0.12 }, () => ui.column("toast-col", () => {
-    app.toasts.forEach((t, i) => {
-      if (textWidth(t.text, "toast") + 32 <= w) ui.style("toast").id(`toast-${i}`).label(t.text);
-      else ui.style("toast").id(`toast-${i}`).paragraph(t.text, w - 32);
-    });
-  }, { spacing: 6, align: "center" }));
-}
+/** ui.toast's stack, past its 16 px margin: 12% of the window up from the bottom. */
+export function toastOffset(): number { return Math.max(0, layoutNow().lh * 0.12 - 16); }
 function caption(L: Layout): void {
   const c = app.caption;
   if (!c) return;

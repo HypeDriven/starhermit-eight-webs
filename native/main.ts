@@ -22,7 +22,7 @@
 // Time is the runtime's fixed steps (60 a second): the session's clock
 // (js/session.js clock) reads them, and the countdown, the hint's 3.5 s,
 // toasts and captions wait on the same steps, so play scripts replay exactly.
-import { clipboard, frame, levelSettings, onFixedUpdate, onPreferencesChange, onQuit, onRender, onResume, onStart, onSuspend, onUpdate, preferences, setFixedRate } from "starhermit:engine";
+import { clipboard, frame, levelSettings, strings, onFixedUpdate, onPreferencesChange, onQuit, onRender, onResume, onStart, onSuspend, onUpdate, preferences, setFixedRate } from "starhermit:engine";
 import { onAction, onPointerButton, onPointerMove, onTouch, vibrate } from "starhermit:input";
 import * as ui from "starhermit:ui";
 import { onSessionEnded, requestSignIn } from "starhermit:platform";
@@ -35,7 +35,7 @@ import { N, T } from "./i18n.ts";
 import * as platform from "./platform.ts";
 import { lookFor } from "./quality.ts";
 import * as render from "./render.ts";
-import { drawScreens } from "./screens.ts";
+import { drawScreens, toastOffset } from "./screens.ts";
 import { applyTheme, initStyles } from "./style.ts";
 
 // -- the shapes this client reads ------------------------------------------------------------
@@ -86,7 +86,6 @@ export const app = {
   helpFromRound: false,
   restored: false,
   countdown: null as { n: number; left: number } | null,
-  toasts: [] as { text: string; until: number }[],
   caption: null as { text: string; until: number } | null,
   focusCard: null as { col: number; idx: number } | null,
   hintMove: null as { from: number; idx: number; to: number } | null,
@@ -110,9 +109,13 @@ let timeWarned = false;
 // ------------------------------------------------------------------ helpers
 export function announce(text: string): void { if (text) ui.announce(String(text).slice(0, 500)); }
 /** ui.js toast(): 4 s by default. */
+const liveToasts: { toast: ReturnType<NonNullable<typeof ui.toast>>; until: number }[] = [];
 export function toast(text: string, ms = 4000): void {
-  app.toasts.push({ text, until: now() + ms / 1000 });
-  if (app.toasts.length > 3) app.toasts.shift();
+  // The stack holds three and queues the rest: the oldest makes way, so a new lesson step shows at once.
+  while (liveToasts.length && liveToasts[0]!.until < now()) liveToasts.shift();
+  if (liveToasts.length >= 3) liveToasts.shift()!.toast?.dismiss();
+  const handle = ui.toast!(text, { duration: ms / 1000, style: "toast", dismissible: false, announce: false, position: "bottom", offset: toastOffset() });
+  liveToasts.push({ toast: handle, until: now() + ms / 1000 });
 }
 export function haptic(ms = 12): void { if (options.haptics) { try { vibrate(ms); } catch { /* no motor */ } } }
 export const theme = (): render.Theme => getTheme(options.theme) as render.Theme;
@@ -471,9 +474,9 @@ function postToLeaderboard(def: Def, st: State): void {
 export function leaderboardLine(): string | null {
   const lb = app.lb;
   if (!lb) return null;
-  if (lb === "posting") return T("Posting score to the leaderboard…");
-  if (!lb.posted) return T("Score not posted to the leaderboard.");
-  return lb.rank ? T("Leaderboard rank: #{rank}", { rank: lb.rank }) : T("Score posted to the leaderboard.");
+  if (lb === "posting") return strings.t("starhermit.leaderboardPosting");
+  if (!lb.posted) return strings.t("starhermit.leaderboardNotPosted");
+  return lb.rank ? strings.t("starhermit.leaderboardRank", { rank: lb.rank }) : strings.t("starhermit.leaderboardPosted");
 }
 export function nextRecommended(): { label: string; act: () => void } {
   const def = app.results?.def ?? session.def;
@@ -494,8 +497,8 @@ export function resultsTitle(): void { app.results = null; goTitle(); }
 export function copyInvite(): void {
   const link = platform.inviteLink();
   if (!link) return;
-  try { clipboard.writeText(link); toast(T("Invite link copied to the clipboard.")); }
-  catch { toast(T("Could not copy — invite link: {link}", { link })); }
+  try { clipboard.writeText(link); toast(strings.t("starhermit.inviteCopied")); }
+  catch { toast(strings.t("starhermit.inviteLink", { link })); }
 }
 export function signIn(): void { void requestSignIn().catch(() => undefined); }
 export function statusLine(): string | null {
@@ -717,7 +720,6 @@ onUpdate((dt) => {
   applyLook();
   audio.update();
   const t = now();
-  app.toasts = app.toasts.filter((x) => x.until >= t);
   if (app.caption && app.caption.until < t) app.caption = null;
 });
 onRender(() => {

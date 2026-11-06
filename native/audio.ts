@@ -10,15 +10,13 @@
 // the volumes and the mute): music → "music", the effects and the ambience
 // → "effects" (voice carried nothing); the old default bus levels (music
 // 60 %, effects 80 %, ambience 40 %) are folded into each sound's gain. The
-// plucks' triangle notes are rendered once into clips (createClip) with the
-// old oscillator envelope; the synthesized stand-ins the browser build
+// plucks' triangle notes are rendered once offline in onStart with the old
+// oscillator envelope; the synthesized stand-ins the browser build
 // played while a clip decoded (and its tap / miss mp3 samples) are not
-// ported (a live synthesis graph makes clip loads fail on the engine's web
-// runtime; the arrow-exodus port's finding), so a clip still loading is
-// silent. Every clip loads at once in onStart (the engine hands each loaded
-// clip to the mixer, natively and on the web); the loops and the plucks
-// start once the mixer runs (in a browser, after the first press).
-import { context, createClip, loadClip, play as playClip, type AudioClip, type Sound } from "starhermit:audio";
+// ported, so a clip still loading is silent. Every clip loads at once in
+// onStart; the loops and the plucks start once the mixer runs (in a browser,
+// after the first press).
+import { context, createClip, loadClip, OfflineAudioContext, play as playClip, type AudioClip, type Sound } from "starhermit:audio";
 import { createStream } from "../js/rules.js";
 
 const LEVEL = { music: 0.6, effects: 0.8, ambience: 0.4 };
@@ -52,6 +50,9 @@ export function loadSfx(): void {
   for (const name of new Set([AMBIENCE, MUSIC, ...Object.values(SAMPLES)])) {
     loadClip(`sfx/${name}.opus`).then((c) => { clips.set(name, c); }, (e: unknown) => console.warn(`sfx ${name}: ${String(e)}`));
   }
+  SCALE.forEach((f, i) => {
+    for (const octave of [0, 1]) renderPluck(i + octave * SCALE.length, f * (octave + 1)).catch((e: unknown) => console.warn(`audio: ${String(e)}`));
+  });
 }
 
 /** Plays a cue's sample (once loaded) and shows its caption. */
@@ -68,17 +69,19 @@ export function cue(name: Cue): void {
 // -- the beds and the adaptive plucks ----------------------------------------------------------
 const RATE = 22050;
 /** js/audio.js blip('music', { type: 'triangle', dur: 0.6 }): a triangle with an exponential decay to 0.0001 over 0.6 s. */
-function pluckClip(freq: number): AudioClip {
+async function renderPluck(index: number, freq: number): Promise<void> {
   const dur = 0.6;
-  const n = Math.round((dur + 0.02) * RATE);
-  const out = new Float32Array(n);
-  for (let i = 0; i < n; i++) {
-    const t = i / RATE;
-    const ph = (t * freq) % 1;
-    const tri = 1 - 4 * Math.abs(ph - 0.5);
-    out[i] = tri * Math.pow(0.0001, Math.min(1, t / dur));
-  }
-  return createClip([out], RATE);
+  const off = new OfflineAudioContext(1, Math.round((dur + 0.02) * RATE), RATE);
+  const osc = off.createOscillator();
+  osc.type = "triangle";
+  osc.frequency.value = freq;
+  const gain = off.createGain();
+  gain.gain.setValueAtTime(1, 0);
+  gain.gain.exponentialRampToValueAtTime(0.0001, dur);
+  osc.connect(gain).connect(off.destination);
+  osc.start();
+  const r = await off.startRendering();
+  plucks.set(index, createClip(r));
 }
 const SCALE = [261.6, 293.7, 329.6, 392.0, 440.0, 523.3];
 const plucks = new Map<number, AudioClip>();
@@ -86,7 +89,6 @@ const stream = createStream("audio:variants");
 let ambience: Sound | null = null;
 let bed: Sound | null = null;
 let nextBeat = 0;
-let nextRender = 0;
 let intensity: () => number = () => 0;
 /** The music's intensity 0–1 (webs cleared of the goal), read at each beat. */
 export function setIntensity(fn: () => number): void { intensity = fn; }
@@ -99,20 +101,13 @@ export function setSuspended(on: boolean): void {
   }
 }
 
-/** Each frame once the mixer runs: the two loops (in separate frames), the pluck notes rendered one each 0.3 s,
- * then the plucks' beats by mixer time. */
+/** Each frame once the mixer runs: the two loops (in separate frames), then the plucks' beats by mixer time. */
 export function update(): void {
   if (context.state !== "running" || suspended) return;
   try {
     const amb = clips.get(AMBIENCE), mus = clips.get(MUSIC);
     if (amb && !ambience) { ambience = playClip(amb, { bus: "effects", gain: 0.6 * LEVEL.ambience, loop: true }); return; }
     if (mus && !bed && ambience) { bed = playClip(mus, { bus: "music", gain: 0.35 * LEVEL.music, loop: true }); return; }
-    if (context.currentTime >= nextRender && plucks.size < SCALE.length * 2) {
-      const i = plucks.size;
-      plucks.set(i, pluckClip(SCALE[i % SCALE.length]! * (i >= SCALE.length ? 2 : 1)));
-      nextRender = context.currentTime + 0.3;
-      return;
-    }
   } catch (e) { console.warn(`audio: ${String(e)}`); return; }
   if (plucks.size < SCALE.length * 2) return;
   const now = context.currentTime;

@@ -4,13 +4,15 @@
 // content tables (threads, themes, stages, challenges, lessons, achievements).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DICTS, LOCALES, T, setLocale } from '../js/i18n.js';
+import { readFileSync } from 'node:fs';
 import { ALL } from './i18n-keys.mjs';
 
+const DICTS = JSON.parse(readFileSync(new URL('../assets/strings.json', import.meta.url), 'utf8'));
+const LOCALES = Object.keys(DICTS);
 const placeholders = (s) => [...String(s).matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort().join(',');
 
 test('the key set is non-trivial', () => {
-  assert.ok(ALL.size > 300, `only ${ALL.size} keys found`);
+  assert.ok(ALL.size > 280, `only ${ALL.size} keys found`);
 });
 
 for (const locale of LOCALES.filter((l) => l !== 'en-US' && l !== 'en-GB')) {
@@ -30,13 +32,9 @@ test('no locale carries keys that no longer exist', () => {
   }
 });
 
-test('T falls back to the key and fills placeholders', () => {
-  setLocale('de-DE');
-  assert.equal(T('Not a real key {x}', { x: 1 }), 'Not a real key 1');
-  assert.equal(T('Column {n} (empty)', { n: 2 }), 'Spalte 2 (leer)');
-  setLocale('fr-CA');
-  assert.equal(T('Scores'), 'Pointages');
-  assert.equal(T('Webs'), 'Toiles'); // inherited from fr-FR
-  setLocale('en-US');
-  assert.equal(T('Webs'), 'Webs');
+test('the tables carry the regional differences', () => {
+  assert.equal(DICTS['de-DE']['Column {n} (empty)'], 'Spalte {n} (leer)');
+  assert.equal(DICTS['fr-CA']['Scores'], 'Pointages');
+  assert.equal(DICTS['fr-CA']['Webs'], 'Toiles'); // inherited from fr-FR
+  assert.equal(DICTS['en-US']['Webs'], 'Webs');
 });

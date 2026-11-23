@@ -1,3 +1,4 @@
+import { showCursor } from "./cursor.ts";
 import { withLanguageRender as __l10nRender } from "./l10n/menu.ts";
 // Eight Webs on the StarHermit engine: the entry module (starhermit.txt
 // engine.entry), played natively by the StarHermit client and in browsers by
@@ -661,6 +662,7 @@ audio.onCaption((text) => { app.caption = { text: T(text), until: now() + 1.6 };
 audio.setIntensity(() => { const st = session.state; return st ? st.foundations / Math.max(1, st.webGoal) : 0; });
 
 onStart(() => {
+  showCursor();
   setFixedRate(60);
   initStyles(theme());
   platform.initPlatform();

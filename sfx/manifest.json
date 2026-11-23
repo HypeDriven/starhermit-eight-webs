@@ -100,5 +100,11 @@
     "seconds": 12,
     "prompt": "Quiet room tone of a calm wood-panelled study: faint soft wall clock ticking, distant muffled birdsong through a closed window, gentle warm air hum, no music, no voices.",
     "event": "ambience"
+  },
+  {
+    "name": "music-gameplay",
+    "seconds": 30,
+    "prompt": "The original quiet card-table music bed, re-encoded from music_gameplay.mp3.",
+    "event": "music"
   }
 ]

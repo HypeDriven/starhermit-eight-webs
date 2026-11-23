@@ -21,3 +21,4 @@ Generated with MOSS-SoundEffect v2.0, 48 kHz mono Opus (96 kbps VBR, loudness-no
 | lesson-step.opus | lesson-step | A gentle two-note wooden xylophone tap, soft and encouraging, like a page turning cue. |
 | pause-open.opus | pause | A soft felt-lined wooden drawer sliding open with a quiet muted thump at the end. |
 | ambience-study.opus | ambience | Quiet room tone of a calm wood-panelled study: faint soft wall clock ticking, distant muffled birdsong through a closed window, gentle warm air hum, no music, no voices. |
+| music-gameplay.opus | music | Original card-table music bed, re-encoded from music_gameplay.mp3; loops beneath the adaptive plucks. |

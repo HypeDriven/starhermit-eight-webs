@@ -73,7 +73,7 @@
     "native/render.ts": {"sha256": "b38dd849b1c8f69d5b5ca04b3e11e18465700c7db608fd6d173d842d3a8364b6", "size": 20731},
     "native/screens.ts": {"sha256": "58197ef85c17b080459f9956b4563b28089bb94a1238ab3efd63f030b9a361e3", "size": 46438},
     "native/style.ts": {"sha256": "e10c5c79324f4163713848b9890a77da8116e3bd731ff7c478c7fa592d062f98", "size": 3997},
-    "publication.json": {"sha256": "5bfa7faa43cdeb7ff98479e9b415ae283368f9f6a8a42941ee68bae875c9eaa1", "size": 4133},
+    "publication.json": {"sha256": "9b8e4d533f19ec87da0687f33761ea135653dc49e0420e9d6378077cdd96e5d1", "size": 4133},
     "score-script.js": {"sha256": "2dbfcf68f98b1c687e6c9539fc400ce5cb22a6bf598881342b55383d22db8948", "size": 2486},
     "sfx/achievement-unlock.opus": {"sha256": "8b605c7f44c20c4fc9d850bdb3296e8bdff8b9e306908a5c1c4728fe852d86c9", "size": 30737},
     "sfx/ambience-study.opus": {"sha256": "2b29b54c1c2e062f1892fde5e8d74745ca26a32db9089b26f19529c30c980463", "size": 130504},

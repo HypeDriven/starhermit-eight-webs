@@ -12,7 +12,7 @@
     "metadataSource": "starhermit.txt",
     "createdAt": "2026-09-01T07:01:01.129251+00:00",
     "coverArtSource": "manifest",
-    "coverArtUpdatedAt": "2026-11-23T17:01:38.715363+00:00",
+    "coverArtUpdatedAt": "2026-11-26T12:29:35.989105+00:00",
     "submittedByUserId": "2712e04e-461b-4d23-81ae-e40b429128a8",
     "submittedByUsername": "starhermit",
     "hosting": {
@@ -22,9 +22,9 @@
       "pinnedCommitSha": null,
       "deployedCommitSha": null,
       "deployError": null,
-      "deployedAt": "2026-11-23T17:01:38.704539+00:00",
+      "deployedAt": "2026-11-26T12:29:35.976705+00:00",
       "externalLaunchUrl": null,
-      "engineVersion": "1.47.0",
+      "engineVersion": "1.50.0",
       "deployWarning": null
     },
     "description": "Build descending same-suit card runs from King to Ace and clear all eight in this spider solitaire puzzle.",
@@ -36,19 +36,19 @@
     "links": [],
     "isDisabled": false
   },
-  "publishedAt": "2026-11-23T17:01:38.881Z",
-  "sourceCommit": "c0f6a76a3ccf2cc29abd73a0c0c420ea7926b323",
-  "bytesReceived": 5001033,
-  "archiveSha256": "f1cb5dcb0423d03adcb4b02a878fed55eaf66eb1b57dc2e6c674133df06ccd03",
+  "publishedAt": "2026-11-26T12:29:36.107Z",
+  "sourceCommit": "9cdd7c8416fdb5543a2627559d97e4a183f59fa2",
+  "bytesReceived": 5001062,
+  "archiveSha256": "72dbe971f5f453291d9f26623c3dee1960f5c10f9d5714a6565f26065eb557eb",
   "indexSha256": "171e710e722fdb9df57044d067e98d7e3793d4184f73087b0d7fb8bd3b877b95",
   "result": {
     "clientPublished": true,
     "serverImageLoaded": false,
     "imageDigest": null,
-    "bytesReceived": 5001033,
+    "bytesReceived": 5001062,
     "mode": "replace",
     "filesRemoved": 0,
-    "engineVersion": "1.47.0",
+    "engineVersion": "1.50.0",
     "deployWarning": null
   },
   "liveVerification": {

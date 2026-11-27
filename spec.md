@@ -11,7 +11,7 @@ Present-tense description of the shipped game. Every statement below is true of 
 | Genre | Single-player card sequencing puzzle (Spider-family patience with authored progression) |
 | Players | 1; local scores, history and a per-device daily board |
 | Session length | Learn lesson 1–2 min; Journey/Practice/Daily round 10–40 min; Challenges 10–25 min |
-| Platforms | StarHermit engine script game (engine 1.51.0, host API 1.51): natively in the StarHermit client and in desktop and mobile browsers through the engine's web runtime |
+| Platforms | StarHermit engine script game (engine 1.53.0, host API 1.53): natively in the StarHermit client and in desktop and mobile browsers through the engine's web runtime |
 | Rendering | `starhermit:scene` orthographic "shadow-box" table under the card layer drawn with `starhermit:ui` (cards, stock, webs and pads are accessible widgets), both from one layout model |
 | Entry | `native/main.ts` (`engine.entry`); browsers open the engine's loader `index.html` (`launch`); platform script `score-script.js` (`server=`) |
 
@@ -19,7 +19,7 @@ Present-tense description of the shipped game. Every statement below is true of 
 
 | Path | Responsibility |
 |---|---|
-| `starhermit.txt` | Manifest: name, description, owner, `server=score-script.js`, cover, `launch=index.html`, `engine.api=1`, `engine.entry=native/main.ts`, `engine.version=1.51.0`, `engine.minor=51`, capabilities `platform,storage,clipboard`, `control.*` and `engine.gamepad.*` for every action |
+| `starhermit.txt` | Manifest: name, description, owner, `server=score-script.js`, cover, `launch=index.html`, `engine.api=1`, `engine.entry=native/main.ts`, `engine.version=1.53.0`, `engine.minor=53`, capabilities `platform,storage,clipboard`, `control.*` and `engine.gamepad.*` for every action |
 | `native/main.ts` | Entry: the round controller (screens and dialogs state, round lifecycle with the saved round, selection, card cursor, drags, Deal/Undo/Hint, the clock, event presentation, progression, achievements, history, score posting, lifecycle), all on the runtime's fixed steps |
 | `native/screens.ts` | Every screen, the HUD, the card layer, dialogs, toasts and captions on `starhermit:ui`; symbols and emoji (▶ ✓ ★ 🕸 🏅 ⏱ ♪ ☰ and the thread glyphs ●◆▲■) are plain text, drawn by the engine's fonts and built-in emoji |
 | `native/render.ts` | The 3D table (`starhermit:scene`): felt, frame, inlay, corner webs, motes, sparks, lights, post chain per look |
@@ -319,12 +319,14 @@ The string tables include complete regional variants for `fr-BE`, `de-BE`, `en-S
 
 <!-- regional-localization:end -->
 
-## Engine 1.51.0
+## Engine 1.53.0
 
-Browser play uses the StarHermit 1.51.0 web runtime on WebGPU, or WebGL 2 where WebGPU is missing. Automatic ray-traced shadows are enabled on supported Vulkan devices, with mapped-shadow fallbacks elsewhere. Packaging creates block-compressed runtime textures and compressed glTF copies, retaining original image fallbacks.
+Browser play uses the StarHermit 1.53.0 web runtime on WebGPU, or WebGL 2 where WebGPU is missing. Automatic ray-traced shadows are enabled on supported Vulkan devices, with mapped-shadow fallbacks elsewhere. Packaging creates block-compressed runtime textures and compressed glTF copies, retaining original image fallbacks.
 
 The help screen replays through retained native UI while its contents, options, layout and key bindings are unchanged.
 
 Browser rendering uses the engine's asynchronous pipeline creation so newly encountered materials do not stall the page. Native play retains the engine's synchronous pipeline behavior.
 
 Higher graphics tiers use native per-object motion blur for moving pieces and effects. Camera motion stays sharp, lower tiers omit the effect, and the runtime's Motion blur and Reduce motion preferences remain authoritative.
+
+On engine 1.53.0, browser play through WebGL 2 compiles a frame's shader programs together and holds that frame until they are linked, blends skinned meshes in one pass, reuses the window pass's depth, and uses a hardware WebGL 2 context when WebGPU's adapter is software.
